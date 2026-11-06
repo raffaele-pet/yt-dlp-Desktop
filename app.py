@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlparse
 
 
-APP_NAME = "YT-DLP"
+APP_NAME = "yt-dlp Desktop"
 APP_DIR = Path(__file__).resolve().parent
 ICON_PNG = APP_DIR / "assets" / "yt-dlp-icon.png"
 ICON_ICO = APP_DIR / "assets" / "yt-dlp-icon.ico"
@@ -339,7 +339,7 @@ class YtDlpApp:
         brand = ttk.Frame(container)
         brand.grid(row=0, column=0, sticky="w")
         ttk.Label(brand, text=">_", style="Prompt.TLabel").pack(side="left")
-        ttk.Label(brand, text="yt-dlp", style="Brand.TLabel").pack(side="left", padx=(8, 0))
+        ttk.Label(brand, text=APP_NAME, style="Brand.TLabel").pack(side="left", padx=(8, 0))
         ttk.Label(
             container,
             text="Scarica e converti video, audio e playlist con yt-dlp",

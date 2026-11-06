@@ -9,13 +9,13 @@ pythonw = projectFolder & "\.venv\Scripts\pythonw.exe"
 appFile = projectFolder & "\app.py"
 
 If Not fso.FileExists(pythonw) Then
-    MsgBox "YT-DLP non è ancora installato." & vbCrLf & _
-           "Esegui prima INSTALL.bat per creare l'ambiente locale .venv.", 16, "YT-DLP"
+    MsgBox "yt-dlp Desktop non è ancora installato." & vbCrLf & _
+           "Esegui prima INSTALL.bat per creare l'ambiente locale .venv.", 16, "yt-dlp Desktop"
     WScript.Quit 1
 End If
 
 If Not fso.FileExists(appFile) Then
-    MsgBox "Il file app.py non è stato trovato.", 16, "YT-DLP"
+    MsgBox "Il file app.py non è stato trovato.", 16, "yt-dlp Desktop"
     WScript.Quit 1
 End If
 

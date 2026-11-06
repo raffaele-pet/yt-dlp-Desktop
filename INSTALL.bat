@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
-title YT-DLP - Installazione e aggiornamento
+title yt-dlp Desktop - Installazione e aggiornamento
 color 0F
 
 set "PROJECT_DIR=%~dp0"
@@ -19,7 +19,7 @@ set "CHECK_ONLY=0"
 if /I "%~1"=="--check" set "CHECK_ONLY=1"
 
 echo ================================================================
-echo                       YT-DLP INSTALLER
+echo                   yt-dlp Desktop INSTALLER
 echo ================================================================
 echo Cartella progetto: %PROJECT_DIR_NO_SLASH%
 echo.
@@ -176,12 +176,12 @@ echo.
 echo [6/6] Creazione del collegamento sul Desktop...
 set "YT_DLP_PROJECT=%PROJECT_DIR_NO_SLASH%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'YT-DLP.lnk')); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia l''interfaccia YT-DLP'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
+    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shell=New-Object -ComObject WScript.Shell; $link=Join-Path $desktop 'yt-dlp Desktop.lnk'; $old=Join-Path $desktop 'YT-DLP.lnk'; if((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $link)){ $previous=$shell.CreateShortcut($old); if($previous.WorkingDirectory.TrimEnd('\') -ieq $project.TrimEnd('\')){Move-Item -LiteralPath $old -Destination $link} }; $shortcut=$shell.CreateShortcut($link); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia yt-dlp Desktop'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
 if errorlevel 1 (
     call :fatal "Impossibile creare il collegamento sul Desktop."
     exit /b 1
 )
-echo [OK] Collegamento YT-DLP creato sul Desktop.
+echo [OK] Collegamento yt-dlp Desktop creato sul Desktop.
 
 echo.
 echo ================================================================
@@ -189,7 +189,7 @@ echo INSTALLAZIONE COMPLETATA CON SUCCESSO
 echo ================================================================
 echo.
 
-choice /C SN /N /M "Vuoi avviare YT-DLP ora? [S/N]: "
+choice /C SN /N /M "Vuoi avviare yt-dlp Desktop ora? [S/N]: "
 if errorlevel 2 goto :finish
 start "" "%WINDIR%\System32\wscript.exe" "%PROJECT_DIR%RUN.vbs"
 

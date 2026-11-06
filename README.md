@@ -1,4 +1,4 @@
-# yt-dlp Windows GUI
+# yt-dlp Desktop
 
 Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp), pensata per scaricare video, audio e playlist su Windows senza utilizzare manualmente il terminale.
 
@@ -32,12 +32,12 @@ Gli altri componenti possono essere installati automaticamente:
 
 ## Installazione
 
-1. Scarica la repository come file ZIP da GitHub.
+1. Scarica la [repository yt-dlp Desktop](https://github.com/raffaele-pet/yt-dlp-Desktop) come file ZIP da GitHub.
 2. Estrai l'intera cartella.
 3. Fai doppio clic su `INSTALL.bat`.
 4. Segui l'avanzamento mostrato nel terminale.
 
-L'installer riutilizza qualsiasi Python di sistema compatibile senza installarne o aggiornarne un secondo. Crea quindi `.venv` dentro il progetto e vi installa il pacchetto stabile ufficiale di yt-dlp; a ogni nuova esecuzione controlla e applica gli aggiornamenti soltanto in questo ambiente isolato. FFmpeg e Deno restano gestiti tramite WinGet. Al termine verifica le versioni e crea un collegamento **YT-DLP** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000).
+L'installer riutilizza qualsiasi Python di sistema compatibile senza installarne o aggiornarne un secondo. Crea quindi `.venv` dentro il progetto e vi installa il pacchetto stabile ufficiale di yt-dlp; a ogni nuova esecuzione controlla e applica gli aggiornamenti soltanto in questo ambiente isolato. FFmpeg e Deno restano gestiti tramite WinGet. Al termine verifica le versioni e crea un collegamento **yt-dlp Desktop** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000). L'eventuale collegamento precedente **YT-DLP**, se riferito alla stessa installazione, viene rinominato.
 
 Per eseguire soltanto un controllo, senza installare o modificare nulla:
 
