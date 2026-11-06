@@ -5,8 +5,8 @@ cd /d "%~dp0"
 set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
 
 if not exist "%PYTHON_EXE%" (
-    echo Ambiente locale non trovato: %PYTHON_EXE%
-    echo Esegui prima INSTALL.bat.
+    echo Local environment not found: %PYTHON_EXE%
+    echo Run INSTALL.bat first.
     pause
     exit /b 1
 )
@@ -15,6 +15,6 @@ if not exist "%PYTHON_EXE%" (
 
 if errorlevel 1 (
     echo.
-    echo L'app si e chiusa con un errore.
+    echo The application exited with an error.
     pause
 )

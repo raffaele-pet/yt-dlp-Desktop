@@ -32,7 +32,7 @@ COLOR_WHITE = "#FFFFFF"
 COLOR_MUTED = "#C9D1D9"
 
 FORMAT_OPTIONS: dict[str, list[str]] = {
-    "Video MP4 (consigliato)": [
+    "MP4 video (recommended)": [
         "-f",
         "bv*+ba[ext=m4a]/bv*+ba/b",
         "--merge-output-format",
@@ -40,11 +40,11 @@ FORMAT_OPTIONS: dict[str, list[str]] = {
         "--remux-video",
         "mp4",
     ],
-    "Video - qualità massima": ["-f", "bv*+ba/b"],
-    "Solo audio MP3": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
-    "Solo audio M4A": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
+    "Video - best quality": ["-f", "bv*+ba/b"],
+    "MP3 audio only": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
+    "M4A audio only": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
 }
-BEST_RESOLUTION = "Massima disponibile"
+BEST_RESOLUTION = "Best available"
 
 
 def available_resolutions(info: dict, format_name: str) -> list[int]:
@@ -102,7 +102,7 @@ def probe_yt_dlp(executable: str) -> str:
     )
     version = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
     if result.returncode != 0 or not re.match(r"^\d{4}\.\d{2}\.\d{2}", version):
-        raise RuntimeError("Il programma trovato non è il comando yt-dlp corretto.")
+        raise RuntimeError("The selected program is not the yt-dlp command-line tool.")
     return version
 
 
@@ -183,12 +183,12 @@ class YtDlpApp:
         self.url_var = tk.StringVar()
         default_downloads = Path.home() / "Downloads"
         self.destination_var = tk.StringVar(value=str(default_downloads))
-        self.format_var = tk.StringVar(value="Video MP4 (consigliato)")
+        self.format_var = tk.StringVar(value="MP4 video (recommended)")
         self.resolution_var = tk.StringVar(value=BEST_RESOLUTION)
-        self.resolution_hint = tk.StringVar(value="Incolla un link per leggere le risoluzioni disponibili.")
+        self.resolution_hint = tk.StringVar(value="Paste a URL to check available resolutions.")
         self.playlist_var = tk.BooleanVar(value=False)
-        self.status_var = tk.StringVar(value="Pronto")
-        self.detail_var = tk.StringVar(value="Incolla il link di un video per iniziare.")
+        self.status_var = tk.StringVar(value="Ready")
+        self.detail_var = tk.StringVar(value="Paste a video URL to get started.")
         self.progress_var = tk.DoubleVar(value=0)
 
         self._configure_style()
@@ -342,11 +342,11 @@ class YtDlpApp:
         ttk.Label(brand, text=APP_NAME, style="Brand.TLabel").pack(side="left", padx=(8, 0))
         ttk.Label(
             container,
-            text="Scarica e converti video, audio e playlist con yt-dlp",
+            text="Download and convert videos, audio, and playlists with yt-dlp",
             style="Subtitle.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(0, 18))
 
-        ttk.Label(container, text="Link del video", style="Section.TLabel").grid(row=2, column=0, sticky="w")
+        ttk.Label(container, text="Video URL", style="Section.TLabel").grid(row=2, column=0, sticky="w")
         url_row = ttk.Frame(container)
         url_row.grid(row=3, column=0, sticky="ew", pady=(6, 14))
         url_row.columnconfigure(0, weight=1)
@@ -354,14 +354,14 @@ class YtDlpApp:
         self.url_entry.grid(row=0, column=0, sticky="ew", ipady=5)
         self.url_entry.bind("<Return>", lambda _event: self.start_download())
 
-        ttk.Label(container, text="Salva in", style="Section.TLabel").grid(row=4, column=0, sticky="w")
+        ttk.Label(container, text="Save to", style="Section.TLabel").grid(row=4, column=0, sticky="w")
         folder_row = ttk.Frame(container)
         folder_row.grid(row=5, column=0, sticky="ew", pady=(6, 14))
         folder_row.columnconfigure(0, weight=1)
         ttk.Entry(folder_row, textvariable=self.destination_var, font=("Segoe UI", 10)).grid(
             row=0, column=0, sticky="ew", ipady=5
         )
-        ttk.Button(folder_row, text="Sfoglia...", command=self._choose_folder, style="Action.TButton").grid(
+        ttk.Button(folder_row, text="Browse...", command=self._choose_folder, style="Action.TButton").grid(
             row=0, column=1, padx=(8, 0)
         )
 
@@ -369,7 +369,7 @@ class YtDlpApp:
         options.grid(row=6, column=0, sticky="ew", pady=(0, 16))
         options.columnconfigure(0, weight=1)
         options.columnconfigure(1, weight=1)
-        ttk.Label(options, text="Formato", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(options, text="Format", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.format_box = ttk.Combobox(
             options,
             textvariable=self.format_var,
@@ -378,7 +378,7 @@ class YtDlpApp:
             font=("Segoe UI", 10),
         )
         self.format_box.grid(row=1, column=0, sticky="ew", pady=(6, 0), ipady=4)
-        ttk.Label(options, text="Risoluzione", style="Section.TLabel").grid(
+        ttk.Label(options, text="Resolution", style="Section.TLabel").grid(
             row=0, column=1, sticky="w", padx=(12, 0)
         )
         self.resolution_box = ttk.Combobox(
@@ -391,7 +391,7 @@ class YtDlpApp:
         )
         ttk.Checkbutton(
             options,
-            text="Scarica l'intera playlist (se il link ne contiene una)",
+            text="Download the entire playlist (if the URL contains one)",
             variable=self.playlist_var,
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
@@ -399,14 +399,14 @@ class YtDlpApp:
         action_row.grid(row=7, column=0, sticky="ew", pady=(0, 16))
         self.download_button = ttk.Button(
             action_row,
-            text="Scarica",
+            text="Download",
             command=self.start_download,
             style="Primary.TButton",
         )
         self.download_button.pack(side="left")
         self.cancel_button = ttk.Button(
             action_row,
-            text="Annulla",
+            text="Cancel",
             command=self.cancel_download,
             state="disabled",
             style="Action.TButton",
@@ -414,14 +414,14 @@ class YtDlpApp:
         self.cancel_button.pack(side="left", padx=(8, 0))
         self.update_button = ttk.Button(
             action_row,
-            text="Aggiorna yt-dlp",
+            text="Update yt-dlp",
             command=self.start_update,
             style="Action.TButton",
         )
         self.update_button.pack(side="left", padx=(8, 0))
         ttk.Button(
             action_row,
-            text="Apri cartella",
+            text="Open folder",
             command=self._open_folder,
             style="Action.TButton",
         ).pack(side="right")
@@ -444,7 +444,7 @@ class YtDlpApp:
         )
         self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(7, 0))
 
-        ttk.Label(container, text="Dettagli", style="Section.TLabel").grid(row=9, column=0, sticky="w")
+        ttk.Label(container, text="Details", style="Section.TLabel").grid(row=9, column=0, sticky="w")
         log_frame = ttk.Frame(container)
         log_frame.grid(row=10, column=0, sticky="nsew", pady=(6, 0))
         log_frame.rowconfigure(0, weight=1)
@@ -508,19 +508,19 @@ class YtDlpApp:
             state="readonly" if is_video and heights and not self.active_operation else "disabled",
         )
         if not is_video:
-            hint = "La risoluzione non si applica ai download solo audio."
+            hint = "Resolution does not apply to audio-only downloads."
         elif not is_valid_url(self.url_var.get()):
-            hint = "Incolla un link per leggere le risoluzioni disponibili."
+            hint = "Paste a URL to check available resolutions."
         elif self.metadata_url != self.url_var.get().strip():
-            hint = "Lettura delle risoluzioni disponibili..."
+            hint = "Checking available resolutions..."
         elif self.metadata_error:
-            hint = "Risoluzioni non rilevate; puoi scaricare alla qualità massima."
+            hint = "Could not detect resolutions; you can try the best available quality."
         elif not heights:
-            hint = "Nessuna risoluzione video rilevata per questo formato."
+            hint = "No video resolutions found for this format."
         elif self.playlist_var.get():
-            hint = "Per la playlist la risoluzione scelta è un limite massimo."
+            hint = "For playlists, the selected resolution is the maximum quality."
         else:
-            hint = "Risoluzioni disponibili per il video e il formato scelto."
+            hint = "Available resolutions for the selected video and format."
         self.resolution_hint.set(hint)
 
     def _start_metadata(self) -> None:
@@ -549,10 +549,10 @@ class YtDlpApp:
                 timeout=60, check=False,
             )
             if result.returncode:
-                raise RuntimeError(result.stderr.strip() or "Impossibile leggere le risoluzioni.")
+                raise RuntimeError(result.stderr.strip() or "Could not retrieve available resolutions.")
             info = json.loads(result.stdout)
             if not isinstance(info, dict):
-                raise ValueError("Metadati video non validi.")
+                raise ValueError("Invalid video metadata.")
             if info.get("entries") is not None:
                 info = next((entry for entry in info["entries"] if entry), {})
             self.messages.put(("metadata", revision, url, info, ""))
@@ -561,7 +561,7 @@ class YtDlpApp:
 
     def _choose_folder(self) -> None:
         selected = filedialog.askdirectory(
-            title="Scegli la cartella dei download",
+            title="Choose a download folder",
             initialdir=self.destination_var.get() or str(Path.home()),
         )
         if selected:
@@ -573,7 +573,7 @@ class YtDlpApp:
             folder.mkdir(parents=True, exist_ok=True)
             os.startfile(str(folder))  # type: ignore[attr-defined]
         except OSError as exc:
-            messagebox.showerror(APP_NAME, f"Impossibile aprire la cartella:\n{exc}")
+            messagebox.showerror(APP_NAME, f"Could not open the folder:\n{exc}")
 
     def _append_log(self, text: str) -> None:
         self.log.configure(state="normal")
@@ -595,7 +595,7 @@ class YtDlpApp:
 
         url = self.url_var.get().strip()
         if not is_valid_url(url):
-            messagebox.showwarning(APP_NAME, "Inserisci un link valido che inizi con http:// o https://.")
+            messagebox.showwarning(APP_NAME, "Enter a valid URL starting with http:// or https://.")
             self.url_entry.focus_set()
             return
 
@@ -603,7 +603,7 @@ class YtDlpApp:
         if not executable:
             messagebox.showerror(
                 APP_NAME,
-                "yt-dlp non è stato trovato. Avvia INSTALL.bat e riprova.",
+                "yt-dlp was not found. Run INSTALL.bat and try again.",
             )
             return
 
@@ -612,19 +612,19 @@ class YtDlpApp:
                 self.root.after_cancel(self.metadata_after)
                 self.metadata_after = None
             self._start_metadata()
-            self.resolution_hint.set("Attendi la lettura, poi scegli la risoluzione e premi Scarica.")
+            self.resolution_hint.set("Wait for the scan, then choose a resolution and click Download.")
             return
         try:
             yt_dlp_version = probe_yt_dlp(executable)
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-            messagebox.showerror(APP_NAME, f"Impossibile verificare yt-dlp:\n{exc}")
+            messagebox.showerror(APP_NAME, f"Could not verify yt-dlp:\n{exc}")
             return
 
         destination = Path(self.destination_var.get().strip())
         try:
             destination.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            messagebox.showerror(APP_NAME, f"La cartella scelta non è utilizzabile:\n{exc}")
+            messagebox.showerror(APP_NAME, f"The selected folder is not accessible:\n{exc}")
             return
 
         command = build_command(
@@ -640,15 +640,15 @@ class YtDlpApp:
         self.active_destination = destination
         self.destination_snapshot = self._snapshot_destination(destination)
         self.progress_var.set(0)
-        self.status_var.set("Preparazione...")
+        self.status_var.set("Preparing...")
         self.detail_var.set("")
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
-        self._append_log(f"Motore: yt-dlp {yt_dlp_version}")
-        self._append_log(f"Destinazione: {destination}")
+        self._append_log(f"Engine: yt-dlp {yt_dlp_version}")
+        self._append_log(f"Destination: {destination}")
         if "-f" in FORMAT_OPTIONS[self.format_var.get()]:
-            self._append_log(f"Risoluzione: {self.resolution_var.get()}")
+            self._append_log(f"Resolution: {self.resolution_var.get()}")
         self.active_operation = "download"
         self._set_running(True)
 
@@ -666,7 +666,7 @@ class YtDlpApp:
                 errors="replace",
                 creationflags=creation_flags,
             )
-            self.messages.put(("status", "Download in corso...", "Connessione al sito"))
+            self.messages.put(("status", "Downloading...", "Connecting to website"))
             assert self.process.stdout is not None
             for raw_line in self.process.stdout:
                 line = raw_line.rstrip("\r\n")
@@ -677,7 +677,7 @@ class YtDlpApp:
                     eta = progress_match.group(3).strip()
                     detail = speed
                     if eta and eta.upper() != "NA":
-                        detail += f"  •  {eta} rimanenti"
+                        detail += f"  •  {eta} remaining"
                     self.messages.put(("progress", percentage, detail))
                 elif line.startswith("FILE:"):
                     downloaded_file = line[5:].strip()
@@ -701,25 +701,25 @@ class YtDlpApp:
         if not executable:
             messagebox.showerror(
                 APP_NAME,
-                "yt-dlp non è stato trovato. Avvia INSTALL.bat e riprova.",
+                "yt-dlp was not found. Run INSTALL.bat and try again.",
             )
             return
         try:
             current_version = probe_yt_dlp(executable)
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-            messagebox.showerror(APP_NAME, f"Impossibile verificare yt-dlp:\n{exc}")
+            messagebox.showerror(APP_NAME, f"Could not verify yt-dlp:\n{exc}")
             return
 
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
-        self.status_var.set("Controllo aggiornamenti...")
-        self.detail_var.set(f"Versione installata: {current_version}")
+        self.status_var.set("Checking for updates...")
+        self.detail_var.set(f"Installed version: {current_version}")
         self.progress_var.set(0)
         self.progress.configure(mode="indeterminate")
         self.progress.start(12)
-        self._append_log(f"Versione installata: yt-dlp {current_version}")
-        self._append_log("Controllo della release stabile ufficiale...")
+        self._append_log(f"Installed version: yt-dlp {current_version}")
+        self._append_log("Checking the latest official stable release...")
         self.active_operation = "update"
         self._set_running(True, cancellable=False)
 
@@ -772,7 +772,7 @@ class YtDlpApp:
                     self.metadata_info = message[3]
                     self.metadata_error = bool(message[4])
                     if message[4]:
-                        self._append_log(f"Lettura risoluzioni: {message[4]}")
+                        self._append_log(f"Resolution lookup: {message[4]}")
                     self._refresh_resolutions()
                 elif kind == "status":
                     self.status_var.set(message[1])
@@ -782,7 +782,7 @@ class YtDlpApp:
                     self.status_var.set(f"Download {message[1]:.0f}%")
                     self.detail_var.set(message[2])
                 elif kind == "file":
-                    self._append_log(f"Salvato: {message[1]}")
+                    self._append_log(f"Saved: {message[1]}")
                 elif kind == "log":
                     self._append_log(message[1])
                 elif kind == "done":
@@ -796,11 +796,11 @@ class YtDlpApp:
                     self.progress_var.set(0)
                     self.active_operation = None
                     self._set_running(False)
-                    self.status_var.set("Errore")
+                    self.status_var.set("Error")
                     self.detail_var.set("")
                     self._append_log(message[2])
-                    activity = "l'aggiornamento" if operation == "update" else "il download"
-                    messagebox.showerror(APP_NAME, f"Impossibile completare {activity}:\n{message[2]}")
+                    activity = "the update" if operation == "update" else "the download"
+                    messagebox.showerror(APP_NAME, f"Could not complete {activity}:\n{message[2]}")
         except queue.Empty:
             pass
         self.root.after(100, self._drain_messages)
@@ -809,9 +809,9 @@ class YtDlpApp:
         self.active_operation = None
         self._set_running(False)
         if was_cancelled:
-            self.status_var.set("Download annullato")
+            self.status_var.set("Download canceled")
             self.detail_var.set("")
-            self._append_log("Operazione annullata.")
+            self._append_log("Operation canceled.")
         elif return_code == 0:
             verified_files: list[Path] = []
             for raw_path in self.downloaded_files:
@@ -830,27 +830,27 @@ class YtDlpApp:
 
             if verified_files:
                 self.progress_var.set(100)
-                self.status_var.set("Completato")
+                self.status_var.set("Completed")
                 count = len(verified_files)
-                self.detail_var.set("File salvato" if count == 1 else f"{count} file salvati")
+                self.detail_var.set("File saved" if count == 1 else f"{count} files saved")
                 for downloaded_file in verified_files:
-                    self._append_log(f"Download verificato: {downloaded_file}")
+                    self._append_log(f"Verified download: {downloaded_file}")
                 self.root.bell()
             else:
-                self.status_var.set("Nessun file creato")
+                self.status_var.set("No file created")
                 self.detail_var.set("")
-                self._append_log("yt-dlp è terminato senza creare un file verificabile.")
+                self._append_log("yt-dlp finished without creating a verifiable file.")
                 messagebox.showerror(
                     APP_NAME,
-                    "yt-dlp è terminato, ma non è stato trovato alcun file scaricato. "
-                    "Controlla i dettagli nella finestra.",
+                    "yt-dlp finished, but no downloaded file was found. "
+                    "Check the details in the window.",
                 )
         else:
-            self.status_var.set("Download non riuscito")
-            self.detail_var.set(f"Codice errore {return_code}")
+            self.status_var.set("Download failed")
+            self.detail_var.set(f"Error code {return_code}")
             messagebox.showerror(
                 APP_NAME,
-                "Il download non è riuscito. Controlla i dettagli nella finestra.",
+                "The download failed. Check the details in the window.",
             )
 
     def _handle_update_done(
@@ -866,28 +866,28 @@ class YtDlpApp:
 
         if return_code != 0:
             self.progress_var.set(0)
-            self.status_var.set("Aggiornamento non riuscito")
-            self.detail_var.set(f"Codice errore {return_code}")
+            self.status_var.set("Update failed")
+            self.detail_var.set(f"Error code {return_code}")
             messagebox.showerror(
                 APP_NAME,
-                "Non è stato possibile aggiornare yt-dlp. Controlla i dettagli nella finestra.",
+                "Could not update yt-dlp. Check the details in the window.",
             )
             return
 
         self.progress_var.set(100)
         if updated_version == previous_version:
-            self.status_var.set("yt-dlp è già aggiornato")
-            self.detail_var.set(f"Versione {updated_version}")
-            self._append_log(f"Nessun aggiornamento necessario: yt-dlp {updated_version}.")
-            messagebox.showinfo(APP_NAME, f"yt-dlp è già aggiornato alla versione {updated_version}.")
+            self.status_var.set("yt-dlp is up to date")
+            self.detail_var.set(f"Version {updated_version}")
+            self._append_log(f"No update needed: yt-dlp {updated_version}.")
+            messagebox.showinfo(APP_NAME, f"yt-dlp is already up to date (version {updated_version}).")
         else:
-            self.status_var.set("Aggiornamento completato")
-            self.detail_var.set(f"Versione {updated_version}")
-            self._append_log(f"Aggiornamento verificato: {previous_version} → {updated_version}.")
+            self.status_var.set("Update completed")
+            self.detail_var.set(f"Version {updated_version}")
+            self._append_log(f"Verified update: {previous_version} → {updated_version}.")
             self.root.bell()
             messagebox.showinfo(
                 APP_NAME,
-                f"yt-dlp è stato aggiornato dalla versione {previous_version} alla {updated_version}.",
+                f"yt-dlp was updated from {previous_version} to {updated_version}.",
             )
 
     @staticmethod
@@ -929,7 +929,7 @@ class YtDlpApp:
         if self.active_operation != "download" or not process or process.poll() is not None:
             return
         self.cancel_requested = True
-        self.status_var.set("Annullamento...")
+        self.status_var.set("Canceling...")
         self.detail_var.set("")
         self.cancel_button.configure(state="disabled")
 
@@ -946,8 +946,8 @@ class YtDlpApp:
 
     def _on_close(self) -> None:
         if self.process and self.process.poll() is None:
-            activity = "un aggiornamento" if self.active_operation == "update" else "un download"
-            if not messagebox.askyesno(APP_NAME, f"È in corso {activity}. Interromperlo e chiudere?"):
+            activity = "an update" if self.active_operation == "update" else "a download"
+            if not messagebox.askyesno(APP_NAME, f"{activity.capitalize()} is in progress. Stop it and close?"):
                 return
             process = self.process
             subprocess.run(

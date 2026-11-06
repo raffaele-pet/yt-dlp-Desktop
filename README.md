@@ -1,99 +1,28 @@
 # yt-dlp Desktop
 
-Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp), pensata per scaricare video, audio e playlist su Windows senza utilizzare manualmente il terminale.
+An unofficial Windows desktop app for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Download videos and playlists, choose a resolution, or extract MP3/M4A audio. Includes support for VidXgo players and embeds.
 
-## Funzionalità
+## Install
 
-- download video in MP4;
-- download alla massima qualità disponibile;
-- rilevamento automatico delle risoluzioni disponibili e scelta della qualità video;
-- supporto al player VidXgo, anche quando incorporato nella pagina di un altro sito;
-- estrazione audio in MP3 o M4A;
-- supporto alle playlist;
-- scelta della cartella di destinazione;
-- barra di avanzamento e annullamento del download;
-- aggiornamento di yt-dlp direttamente dall'interfaccia;
-- verifica del file realmente creato;
-- gestione dei nomi con caratteri accentati;
-- tema scuro ispirato ai colori di yt-dlp.
+Requires Windows 10/11, an internet connection, and [WinGet](https://learn.microsoft.com/windows/package-manager/winget/).
 
-## Requisiti
+1. Download and extract this repository.
+2. Run `INSTALL.bat`.
+3. Open **yt-dlp Desktop** from the desktop shortcut or run `RUN.vbs`.
 
-- Windows 10 o Windows 11;
-- connessione Internet;
-- Python 3.11 o successivo già installato; se manca, l'installer propone Python 3.13;
-- [WinGet](https://learn.microsoft.com/windows/package-manager/winget/), normalmente incluso nelle versioni moderne di Windows tramite **App Installer**.
+The installer reuses Python 3.11+ if available, creates a local `.venv`, and installs missing tools such as FFmpeg and Deno. Python 3.13 is installed only if no compatible version is found.
 
-Gli altri componenti possono essere installati automaticamente:
+## Use
 
-- yt-dlp, isolato nella cartella locale `.venv`;
-- FFmpeg;
-- Deno.
+Paste a video URL, choose the destination, format, and resolution, then click **Download**. Enable the playlist checkbox to download all items. For playlists, the selected resolution is a maximum.
 
-## Installazione
+**Cancel** stops the download; **Open folder** shows saved files. Site restrictions and authentication requirements still apply.
 
-1. Scarica la [repository yt-dlp Desktop](https://github.com/raffaele-pet/yt-dlp-Desktop) come file ZIP da GitHub.
-2. Estrai l'intera cartella.
-3. Fai doppio clic su `INSTALL.bat`.
-4. Segui l'avanzamento mostrato nel terminale.
+## Update and troubleshoot
 
-L'installer riutilizza qualsiasi Python di sistema compatibile senza installarne o aggiornarne un secondo. Crea quindi `.venv` dentro il progetto e vi installa il pacchetto stabile ufficiale di yt-dlp; a ogni nuova esecuzione controlla e applica gli aggiornamenti soltanto in questo ambiente isolato. FFmpeg e Deno restano gestiti tramite WinGet. Al termine verifica le versioni e crea un collegamento **yt-dlp Desktop** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000). L'eventuale collegamento precedente **YT-DLP**, se riferito alla stessa installazione, viene rinominato.
+- **Update yt-dlp** updates the local download engine and its dependencies.
+- Run `INSTALL.bat` again to check and update all required tools.
+- Use `INSTALL.bat --check` for a read-only requirements check.
+- Use `RUN_DEBUG.cmd` if the app does not start.
 
-Per eseguire soltanto un controllo, senza installare o modificare nulla:
-
-```bat
-INSTALL.bat --check
-```
-
-## Avvio
-
-Fai doppio clic su `RUN.vbs` per aprire l'interfaccia senza mostrare il terminale.
-
-Se l'applicazione non parte, utilizza `RUN_DEBUG.cmd` per visualizzare eventuali errori.
-
-Il pulsante **Aggiorna yt-dlp** aggiorna esclusivamente la copia contenuta nella `.venv`, mostra i dettagli dell'operazione nella finestra e non modifica Python o pacchetti globali.
-
-Incolla il link con **Ctrl+V**: l'app legge le risoluzioni in background, senza scaricare il video. Dopo la lettura, scegli **Risoluzione** e premi **Scarica**. Il menu include tutti i codec video disponibili, compresi VP9 e AV1 usati per risoluzioni come **1440p e 2160p (4K)**; **Massima disponibile** sceglie automaticamente la qualità migliore. La scelta non si applica ai formati solo audio. Se il sito non permette di rilevare le qualità, resta possibile tentare il download alla qualità massima.
-
-Il formato **Video MP4** preferisce l'audio M4A quando disponibile e usa FFmpeg per unire o rimultiplexare le tracce in MP4, conservando il codec e la risoluzione originali senza ricodifica. MP4 indica il contenitore: un video VP9 o AV1 richiede un lettore compatibile con quel codec.
-
-Per le playlist il menu usa le qualità del video nel link, oppure del primo elemento se il link identifica soltanto la playlist. La risoluzione scelta diventa il limite massimo per ciascun elemento, permettendo di scaricare anche i video disponibili soltanto a qualità inferiori. Per un video singolo viene richiesta la risoluzione esatta, senza passare silenziosamente a una qualità diversa.
-
-La barra di scorrimento dei **Dettagli** compare soltanto quando il testo supera lo spazio visibile e segue il tema scuro dell'app.
-
-### Player VidXgo
-
-Puoi incollare un link diretto a `v.vidxgo.co` oppure una pagina che contiene il suo iframe, come un link episodio di Streaming-Community. Il plugin incluso nel progetto individua il player, legge la sorgente HLS e mostra le risoluzioni nella stessa interfaccia degli altri siti. Per le serie conserva stagione ed episodio nell'identificativo del file. Il link episodio identifica un singolo episodio: la casella playlist non aggiunge gli altri episodi della serie.
-
-L'integrazione usa il trasporto browser di yt-dlp (`curl-cffi`) e conserva gli header e i parametri temporanei richiesti dai flussi HLS. Queste dipendenze vengono installate da `INSTALL.bat` oppure dal pulsante **Aggiorna yt-dlp**. Il plugin resta nella cartella `plugins/` e viene caricato esplicitamente sia per leggere le qualità sia per scaricare.
-
-Il sito può comunque rifiutare l'accesso con HTTP 403/429 o essere in manutenzione. In questi casi i dettagli mostrano la causa; l'integrazione non garantisce l'accesso a un player bloccato. Durante la verifica del 28 ottobre 2026 il link segnalato ha consentito di riconoscere il player, ma il server VidXgo ha rifiutato l'accesso con HTTP 403. Il download HLS completo, la selezione della risoluzione e la gestione dei parametri temporanei sono verificati con un server locale di test.
-
-Per eseguire i test dell'interfaccia e della selezione delle risoluzioni su Windows:
-
-```bat
-.venv\Scripts\python.exe -m unittest discover -s tests -v
-```
-
-## Struttura del progetto
-
-```text
-app.py          Interfaccia grafica e gestione dei download
-INSTALL.bat     Installazione e verifica dei requisiti
-RUN.vbs         Avvio normale senza terminale
-RUN_DEBUG.cmd   Avvio diagnostico con terminale
-requirements.txt Pacchetti installati nella .venv locale
-assets/         Icona della finestra e del collegamento Desktop
-plugins/        Estrattore VidXgo caricato dall'applicazione
-tests/          Test dell'interfaccia, delle risoluzioni e del player HLS
-```
-
-## Aggiornamenti
-
-Esegui nuovamente `INSTALL.bat` per controllare e aggiornare tutti i componenti. Per aggiornare soltanto yt-dlp, usa il pulsante dedicato nell'interfaccia.
-
-## Note
-
-Alcuni siti o contenuti possono richiedere autenticazione, cookie del browser oppure applicare limitazioni proprie. Utilizza il programma soltanto per contenuti che hai il diritto di scaricare e nel rispetto dei termini del servizio interessato.
-
-Questo progetto non è affiliato né approvato dal progetto ufficiale yt-dlp.
+Download only content you are authorized to save.

@@ -182,7 +182,7 @@ class InterfaceTests(unittest.TestCase):
         self.gui._drain_messages()
         self.assertTrue(self.gui.metadata_error)
         self.assertEqual(self.gui.resolution_var.get(), app.BEST_RESOLUTION)
-        self.assertIn("qualità massima", self.gui.resolution_hint.get())
+        self.assertIn("best available quality", self.gui.resolution_hint.get())
 
     def test_metadata_worker_parses_json_and_handles_timeout(self):
         result = subprocess.CompletedProcess([], 0, json.dumps({"formats": FORMATS}), "")

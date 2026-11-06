@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
-title yt-dlp Desktop - Installazione e aggiornamento
+title yt-dlp Desktop - Installation and updates
 color 0F
 
 set "PROJECT_DIR=%~dp0"
@@ -21,27 +21,27 @@ if /I "%~1"=="--check" set "CHECK_ONLY=1"
 echo ================================================================
 echo                   yt-dlp Desktop INSTALLER
 echo ================================================================
-echo Cartella progetto: %PROJECT_DIR_NO_SLASH%
+echo Project folder: %PROJECT_DIR_NO_SLASH%
 echo.
 
 if not exist "%PROJECT_DIR%app.py" (
-    call :fatal "Manca il file app.py nella cartella del progetto."
+    call :fatal "app.py is missing from the project folder."
     exit /b 1
 )
 if not exist "%PROJECT_DIR%RUN.vbs" (
-    call :fatal "Manca il file RUN.vbs nella cartella del progetto."
+    call :fatal "RUN.vbs is missing from the project folder."
     exit /b 1
 )
 if not exist "%PROJECT_DIR%requirements.txt" (
-    call :fatal "Manca il file requirements.txt nella cartella del progetto."
+    call :fatal "requirements.txt is missing from the project folder."
     exit /b 1
 )
 if not exist "%PROJECT_DIR%assets\yt-dlp-icon.png" (
-    call :fatal "Manca l'icona PNG dell'applicazione."
+    call :fatal "The application PNG icon is missing."
     exit /b 1
 )
 if not exist "%PROJECT_DIR%assets\yt-dlp-icon.ico" (
-    call :fatal "Manca l'icona Windows dell'applicazione."
+    call :fatal "The application Windows icon is missing."
     exit /b 1
 )
 
@@ -58,76 +58,76 @@ if "%CHECK_ONLY%"=="1" (
 
 where winget.exe >nul 2>&1
 if errorlevel 1 (
-    call :fatal "WinGet non e disponibile. Installa App Installer dal Microsoft Store e riprova."
+    call :fatal "WinGet is not available. Install App Installer from the Microsoft Store and try again."
     exit /b 1
 )
 
-echo [1/6] Controllo di Python...
+echo [1/6] Checking Python...
 if "!PYTHON_OK!"=="0" (
-    echo [INSTALLA] Python 3.13: non e stata trovata alcuna versione compatibile.
+    echo [INSTALL] Python 3.13: no compatible Python version was found.
     winget install --id "Python.Python.3.13" --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
     if errorlevel 1 (
-        call :fatal "Installazione di Python 3.13 non riuscita."
+        call :fatal "Python 3.13 installation failed."
         exit /b 1
     )
     call :find_python
 )
 if "!PYTHON_OK!"=="0" (
-    call :fatal "Python 3.11 o successivo non e stato trovato dopo l'installazione."
+    call :fatal "Python 3.11 or later was not found after installation."
     exit /b 1
 )
-echo [OK] Uso !PYTHON_VERSION!: !PYTHON_EXE!
-echo      Python di sistema non verra duplicato ne aggiornato dall'installer.
+echo [OK] Using !PYTHON_VERSION!: !PYTHON_EXE!
+echo      The installer will reuse your system Python without upgrading it.
 
 echo.
-echo [2/6] Preparazione dell'ambiente isolato .venv...
+echo [2/6] Preparing the isolated .venv environment...
 if exist "%VENV_DIR%" if "!VENV_OK!"=="0" (
-    echo [RIPARA] L'ambiente locale esistente non e piu valido e verra ricreato.
+    echo [REPAIR] The existing local environment is invalid and will be recreated.
     rmdir /s /q "%VENV_DIR%"
 )
 if not exist "%VENV_PY%" (
     "!PYTHON_EXE!" -m venv "%VENV_DIR%"
     if errorlevel 1 (
-        call :fatal "Creazione dell'ambiente .venv non riuscita."
+        call :fatal "Could not create the .venv environment."
         exit /b 1
     )
 ) else (
-    echo [OK] Ambiente .venv gia presente.
+    echo [OK] The .venv environment already exists.
 )
 "%VENV_PY%" -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
 if errorlevel 1 (
-    call :fatal "Aggiornamento degli strumenti dell'ambiente .venv non riuscito."
+    call :fatal "Could not update the .venv packaging tools."
     exit /b 1
 )
 
 echo.
-echo [3/6] Controllo e aggiornamento di yt-dlp nell'ambiente .venv...
-set "YTDLP_BEFORE=non installato"
+echo [3/6] Checking and updating yt-dlp in .venv...
+set "YTDLP_BEFORE=not installed"
 if exist "%VENV_YTDLP%" for /f "delims=" %%V in ('"%VENV_YTDLP%" --version 2^>nul') do set "YTDLP_BEFORE=%%V"
-echo Versione presente: !YTDLP_BEFORE!
-echo Controllo l'ultima release stabile ufficiale...
+echo Installed version: !YTDLP_BEFORE!
+echo Checking the latest official stable release...
 "%VENV_PY%" -m pip install --disable-pip-version-check --upgrade -r "%PROJECT_DIR%requirements.txt"
 if errorlevel 1 (
-    call :fatal "Installazione o aggiornamento di yt-dlp nella .venv non riuscito."
+    call :fatal "Could not install or update yt-dlp in .venv."
     exit /b 1
 )
-set "YTDLP_AFTER=non disponibile"
+set "YTDLP_AFTER=not available"
 for /f "delims=" %%V in ('"%VENV_YTDLP%" --version 2^>nul') do set "YTDLP_AFTER=%%V"
 if "!YTDLP_BEFORE!"=="!YTDLP_AFTER!" (
-    echo [OK] yt-dlp !YTDLP_AFTER! e gia aggiornato.
+    echo [OK] yt-dlp !YTDLP_AFTER! is already up to date.
 ) else (
-    echo [AGGIORNATO] yt-dlp !YTDLP_BEFORE! --^> !YTDLP_AFTER!
+    echo [UPDATED] yt-dlp !YTDLP_BEFORE! --^> !YTDLP_AFTER!
 )
 
 echo.
-echo [4/6] Controllo di FFmpeg e Deno...
+echo [4/6] Checking FFmpeg and Deno...
 call :check_ffmpeg
 if "!FFMPEG_OK!"=="0" (
-    call :install_package "yt-dlp.FFmpeg" "FFmpeg per yt-dlp"
+    call :install_package "yt-dlp.FFmpeg" "FFmpeg for yt-dlp"
     if errorlevel 1 exit /b 1
 ) else (
-    echo [OK] FFmpeg gia disponibile.
-    call :upgrade_if_managed "yt-dlp.FFmpeg" "FFmpeg per yt-dlp"
+    echo [OK] FFmpeg is already available.
+    call :upgrade_if_managed "yt-dlp.FFmpeg" "FFmpeg for yt-dlp"
     if errorlevel 1 exit /b 1
 )
 call :check_deno
@@ -135,13 +135,13 @@ if "!DENO_OK!"=="0" (
     call :install_package "DenoLand.Deno" "Deno"
     if errorlevel 1 exit /b 1
 ) else (
-    echo [OK] Deno gia disponibile.
+    echo [OK] Deno is already available.
     call :upgrade_if_managed "DenoLand.Deno" "Deno"
     if errorlevel 1 exit /b 1
 )
 call :ensure_user_path "%LINKS_DIR%"
 if errorlevel 1 (
-    call :fatal "Impossibile aggiornare il PATH utente per WinGet."
+    call :fatal "Could not update the user PATH for WinGet."
     exit /b 1
 )
 call :check_ffmpeg
@@ -156,46 +156,46 @@ if exist "!DENO_EXE!" for %%D in ("!DENO_EXE!") do (
 )
 
 echo.
-echo [5/6] Verifica finale...
+echo [5/6] Final verification...
 call :find_python
 call :check_venv
 call :check_ffmpeg
 call :check_deno
 call :print_status
 if not "!PYTHON_OK!!VENV_OK!!YTDLP_OK!!FFMPEG_OK!!DENO_OK!"=="11111" (
-    call :fatal "La verifica finale non e riuscita. Controlla i messaggi precedenti."
+    call :fatal "Final verification failed. Check the messages above."
     exit /b 1
 )
 "%VENV_PY%" -m py_compile "%PROJECT_DIR%app.py"
 if errorlevel 1 (
-    call :fatal "app.py contiene un errore di sintassi."
+    call :fatal "app.py contains a syntax error."
     exit /b 1
 )
 
 echo.
-echo [6/6] Creazione del collegamento sul Desktop...
+echo [6/6] Creating the desktop shortcut...
 set "YT_DLP_PROJECT=%PROJECT_DIR_NO_SLASH%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shell=New-Object -ComObject WScript.Shell; $link=Join-Path $desktop 'yt-dlp Desktop.lnk'; $old=Join-Path $desktop 'YT-DLP.lnk'; if((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $link)){ $previous=$shell.CreateShortcut($old); if($previous.WorkingDirectory.TrimEnd('\') -ieq $project.TrimEnd('\')){Move-Item -LiteralPath $old -Destination $link} }; $shortcut=$shell.CreateShortcut($link); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia yt-dlp Desktop'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
+    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shell=New-Object -ComObject WScript.Shell; $link=Join-Path $desktop 'yt-dlp Desktop.lnk'; $old=Join-Path $desktop 'YT-DLP.lnk'; if((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $link)){ $previous=$shell.CreateShortcut($old); if($previous.WorkingDirectory.TrimEnd('\') -ieq $project.TrimEnd('\')){Move-Item -LiteralPath $old -Destination $link} }; $shortcut=$shell.CreateShortcut($link); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Launch yt-dlp Desktop'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
 if errorlevel 1 (
-    call :fatal "Impossibile creare il collegamento sul Desktop."
+    call :fatal "Could not create the desktop shortcut."
     exit /b 1
 )
-echo [OK] Collegamento yt-dlp Desktop creato sul Desktop.
+echo [OK] yt-dlp Desktop shortcut created on the desktop.
 
 echo.
 echo ================================================================
-echo INSTALLAZIONE COMPLETATA CON SUCCESSO
+echo INSTALLATION COMPLETED SUCCESSFULLY
 echo ================================================================
 echo.
 
-choice /C SN /N /M "Vuoi avviare yt-dlp Desktop ora? [S/N]: "
+choice /C YN /N /M "Launch yt-dlp Desktop now? [Y/N]: "
 if errorlevel 2 goto :finish
 start "" "%WINDIR%\System32\wscript.exe" "%PROJECT_DIR%RUN.vbs"
 
 :finish
 echo.
-echo Premi un tasto per chiudere questa finestra.
+echo Press any key to close this window.
 pause >nul
 exit /b 0
 
@@ -203,7 +203,7 @@ exit /b 0
 :find_python
 set "PYTHON_OK=0"
 set "PYTHON_EXE="
-set "PYTHON_VERSION=non disponibile"
+set "PYTHON_VERSION=not available"
 if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" call :try_python "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 for /f "delims=" %%P in ('py -3 -c "import sys; print(sys.executable)" 2^>nul') do if not defined PYTHON_EXE call :try_python "%%P"
 for /f "delims=" %%P in ('where python.exe 2^>nul') do if not defined PYTHON_EXE call :try_python "%%P"
@@ -224,7 +224,7 @@ exit /b 0
 :check_venv
 set "VENV_OK=0"
 set "YTDLP_OK=0"
-set "YTDLP_VERSION=non disponibile"
+set "YTDLP_VERSION=not available"
 if exist "%VENV_PY%" if exist "%VENV_PYW%" (
     "%VENV_PY%" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
     if not errorlevel 1 set "VENV_OK=1"
@@ -276,11 +276,11 @@ exit /b 0
 
 
 :print_status
-if "!PYTHON_OK!"=="1" (echo   [OK] !PYTHON_VERSION! di sistema) else (echo   [MANCANTE] Python 3.11 o successivo)
-if "!VENV_OK!"=="1" (echo   [OK] Ambiente locale .venv) else (echo   [MANCANTE] Ambiente locale .venv)
-if "!YTDLP_OK!"=="1" (echo   [OK] yt-dlp !YTDLP_VERSION! nella .venv) else (echo   [MANCANTE] yt-dlp nella .venv)
-if "!FFMPEG_OK!"=="1" (echo   [OK] FFmpeg) else (echo   [MANCANTE] FFmpeg)
-if "!DENO_OK!"=="1" (echo   [OK] Deno) else (echo   [MANCANTE] Deno)
+if "!PYTHON_OK!"=="1" (echo   [OK] !PYTHON_VERSION! system installation) else (echo   [MISSING] Python 3.11 or later)
+if "!VENV_OK!"=="1" (echo   [OK] Local .venv environment) else (echo   [MISSING] Local .venv environment)
+if "!YTDLP_OK!"=="1" (echo   [OK] yt-dlp !YTDLP_VERSION! in .venv) else (echo   [MISSING] yt-dlp in .venv)
+if "!FFMPEG_OK!"=="1" (echo   [OK] FFmpeg) else (echo   [MISSING] FFmpeg)
+if "!DENO_OK!"=="1" (echo   [OK] Deno) else (echo   [MISSING] Deno)
 exit /b 0
 
 
@@ -289,14 +289,14 @@ set "PACKAGE_ID=%~1"
 set "PACKAGE_NAME=%~2"
 echo.
 echo ----------------------------------------------------------------
-echo [INSTALLA] !PACKAGE_NAME!
+echo [INSTALL] !PACKAGE_NAME!
 echo ----------------------------------------------------------------
 winget install --id "!PACKAGE_ID!" --exact --accept-package-agreements --accept-source-agreements --disable-interactivity --silent
 if errorlevel 1 (
-    call :fatal "Installazione di !PACKAGE_NAME! non riuscita."
+    call :fatal "Could not install !PACKAGE_NAME!."
     exit /b 1
 )
-echo [OK] !PACKAGE_NAME! installato.
+echo [OK] !PACKAGE_NAME! installed.
 exit /b 0
 
 
@@ -309,7 +309,7 @@ winget upgrade --id "!PACKAGE_ID!" --exact --accept-package-agreements --accept-
 set "UPDATE_EXIT=!errorlevel!"
 if "!UPDATE_EXIT!"=="0" exit /b 0
 if "!UPDATE_EXIT!"=="-1978335189" exit /b 0
-call :fatal "Controllo o aggiornamento di !PACKAGE_NAME! non riuscito. Codice !UPDATE_EXIT!."
+call :fatal "Could not check or update !PACKAGE_NAME!. Exit code !UPDATE_EXIT!."
 exit /b 1
 
 
@@ -324,9 +324,9 @@ exit /b %errorlevel%
 :fatal
 echo.
 echo ================================================================
-echo [ERRORE] %~1
+echo [ERROR] %~1
 echo ================================================================
 if "%CHECK_ONLY%"=="1" exit /b 1
-echo Premi un tasto per chiudere questa finestra.
+echo Press any key to close this window.
 pause >nul
 exit /b 1

@@ -73,7 +73,7 @@ class VidxgoTests(unittest.TestCase):
 
     def test_missing_transport_reports_installation_instructions(self):
         with patch.object(self.downloader, "_parse_impersonate_targets", return_value=(None, [])):
-            with self.assertRaisesRegex(ExtractorError, "Aggiorna yt-dlp"):
+            with self.assertRaisesRegex(ExtractorError, "Update yt-dlp"):
                 self.extractor._configure_transport()
 
     def test_maintenance_is_reported_without_attempting_media_download(self):
@@ -81,7 +81,7 @@ class VidxgoTests(unittest.TestCase):
             self.extractor, "_download_webpage_handle",
             return_value=("<p>Stiamo lavorando, torniamo presto.</p>", Mock(status=403)),
         ), patch.object(self.extractor, "_download_json") as api:
-            with self.assertRaisesRegex(ExtractorError, "manutenzione"):
+            with self.assertRaisesRegex(ExtractorError, "maintenance"):
                 self.extractor._real_extract(PLAYER)
         api.assert_not_called()
 

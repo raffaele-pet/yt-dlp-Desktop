@@ -85,8 +85,8 @@ class VidxgoIE(InfoExtractor):
             target, _ = self._downloader._parse_impersonate_targets("chrome")
             if target is None:
                 raise ExtractorError(
-                    "VidXgo richiede curl-cffi. Premi 'Aggiorna yt-dlp' "
-                    "oppure esegui INSTALL.bat per installare le dipendenze.",
+                    "VidXgo requires curl-cffi. Click 'Update yt-dlp' "
+                    "or run INSTALL.bat to install the required dependencies.",
                     expected=True,
                 )
             self._downloader.params["impersonate"] = target
@@ -100,20 +100,20 @@ class VidxgoIE(InfoExtractor):
         origin = f"{parts.scheme}://{parts.netloc}"
         self._configure_transport()
         webpage, response = self._download_webpage_handle(
-            url, video_id, note="Lettura del player VidXgo",
+            url, video_id, note="Loading the VidXgo player",
             headers={"Referer": context.get("referer") or origin + "/"},
             expected_status=(403, 429, 503),
         )
         if response.status in (403, 429, 503):
             if re.search(r"stiamo lavorando|torniamo presto|under maintenance", webpage, re.I):
-                message = "il player segnala manutenzione. Riprova quando il sito torna disponibile."
+                message = "the player is under maintenance. Try again when the site is available."
             else:
-                message = "accesso rifiutato dal sito o dalla protezione anti-bot."
+                message = "access was denied by the website or its anti-bot protection."
             raise ExtractorError(f"VidXgo HTTP {response.status}: {message}", expected=True)
 
         endpoint = origin + "/t/" + token + (f"/{season}/{episode}" if season else "")
         data = self._download_json(
-            endpoint, video_id, note="Lettura della sorgente VidXgo", fatal=False,
+            endpoint, video_id, note="Loading the VidXgo source", fatal=False,
             headers={"Referer": url, "Accept": "application/json, text/plain, */*"},
             expected_status=(403, 404, 429, 503),
         )
@@ -122,16 +122,16 @@ class VidxgoIE(InfoExtractor):
             media_url = _find_hls_url(webpage)
         if not media_url:
             raise ExtractorError(
-                "VidXgo non ha fornito una sorgente HLS riconoscibile per questo video.",
+                "VidXgo did not provide a recognizable HLS source for this video.",
                 expected=True,
             )
 
         headers = {"Referer": origin + "/", "Origin": origin}
         manifest, manifest_response = self._download_webpage_handle(
-            media_url, video_id, note="Lettura delle risoluzioni VidXgo", headers=headers,
+            media_url, video_id, note="Loading VidXgo resolutions", headers=headers,
         )
         if not manifest.lstrip().startswith("#EXTM3U"):
-            raise ExtractorError("VidXgo ha restituito un manifest video non valido.", expected=True)
+            raise ExtractorError("VidXgo returned an invalid video manifest.", expected=True)
         manifest_url = manifest_response.url
         formats, subtitles = self._parse_m3u8_formats_and_subtitles(
             manifest, manifest_url, ext="mp4", m3u8_id="hls", headers=headers,
