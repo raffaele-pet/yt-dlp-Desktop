@@ -1,0 +1,52 @@
+name: Windows installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install FFmpeg' }
+          }
+      - name: Test downloads and interface
+        run: python -m unittest discover -s tests -v
+      - name: Build the installer
+        run: |
+          $download = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          $compiler = Join-Path $env:RUNNER_TEMP 'inno'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $download
+          if ((Get-FileHash $download).Hash -ne 'A549929319F9120716677C685535CA4671E4B937B5FDC87E2585F32D8EB30E8C') {
+            throw 'Inno Setup checksum mismatch'
+          }
+          $install = Start-Process $download -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER', '/NORESTART', "/DIR=`"$compiler`"" -Wait -PassThru -WindowStyle Hidden
+          if ($install.ExitCode -ne 0) { throw 'Could not install Inno Setup' }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
+          & (Join-Path $compiler 'ISCC.exe') "/DAppVersion=$version" installer/Setup.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Could not build the installer' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-Desktop-Setup
+          path: dist/yt-dlp-Desktop-Setup.exe
+          if-no-files-found: error
+      - name: Publish the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" --verify-tag --generate-notes dist/yt-dlp-Desktop-Setup.exe

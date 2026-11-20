@@ -1,6 +1,6 @@
 Option Explicit
 
-Dim shell, fso, projectFolder, pythonw, appFile, command
+Dim shell, fso, projectFolder, pythonw, appFile, command, userPath, processEnvironment
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
@@ -20,5 +20,12 @@ If Not fso.FileExists(appFile) Then
 End If
 
 shell.CurrentDirectory = projectFolder
+Set processEnvironment = shell.Environment("Process")
+On Error Resume Next
+userPath = shell.RegRead("HKCU\Environment\Path")
+On Error GoTo 0
+If Len(userPath) > 0 Then
+    processEnvironment("Path") = shell.ExpandEnvironmentStrings(userPath) & ";" & processEnvironment("Path")
+End If
 command = Chr(34) & pythonw & Chr(34) & " " & Chr(34) & appFile & Chr(34)
 shell.Run command, 0, False

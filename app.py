@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import locale
 import os
@@ -15,32 +16,33 @@ from urllib.parse import urlparse
 
 APP_NAME = "yt-dlp Desktop"
 APP_DIR = Path(__file__).resolve().parent
-ICON_PNG = APP_DIR / "assets" / "yt-dlp-icon.png"
-ICON_ICO = APP_DIR / "assets" / "yt-dlp-icon.ico"
+ICON_PNG = APP_DIR / "assets" / "desktop.png"
+ICON_ICO = APP_DIR / "assets" / "desktop.ico"
 VENV_PYTHON = APP_DIR / ".venv" / "Scripts" / "python.exe"
 VENV_YTDLP = APP_DIR / ".venv" / "Scripts" / "yt-dlp.exe"
 REQUIREMENTS = APP_DIR / "requirements.txt"
 PLUGIN_DIR = APP_DIR / "plugins"
 
-COLOR_BACKGROUND = "#0D1117"
-COLOR_SURFACE = "#161B22"
-COLOR_SURFACE_HOVER = "#21262D"
-COLOR_BORDER = "#30363D"
-COLOR_RED = "#FF0000"
-COLOR_RED_HOVER = "#D90000"
-COLOR_WHITE = "#FFFFFF"
-COLOR_MUTED = "#C9D1D9"
+COLOR_BACKGROUND = "#18191B"
+COLOR_SURFACE = "#222326"
+COLOR_SURFACE_HOVER = "#303135"
+COLOR_BORDER = "#3B3D42"
+COLOR_RED = "#C82E37"
+COLOR_RED_HOVER = "#B9252E"
+COLOR_FOCUS = "#F18388"
+COLOR_WHITE = "#F4F4F5"
+COLOR_MUTED = "#ACADB4"
+
+COMPATIBLE_MP4 = "MP4 (H.264 / AAC)"
 
 FORMAT_OPTIONS: dict[str, list[str]] = {
-    "MP4 video (recommended)": [
-        "-f",
-        "bv*+ba[ext=m4a]/bv*+ba/b",
-        "--merge-output-format",
-        "mp4",
-        "--remux-video",
-        "mp4",
+    COMPATIBLE_MP4: [
+        "-f", "bv*+ba/bv*",
+        "-S", "res,fps,vcodec:h264,acodec:aac",
+        "--merge-output-format", "mkv",
+        "--use-postprocessor", "DesktopCompatible:when=post_process",
     ],
-    "Video - best quality": ["-f", "bv*+ba/b"],
+    "Video (original codecs)": ["-f", "bv*+ba/b"],
     "MP3 audio only": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
     "M4A audio only": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
 }
@@ -66,7 +68,7 @@ def available_resolutions(info: dict, format_name: str) -> list[int]:
 
 def build_metadata_command(executable: str, url: str) -> list[str]:
     return [
-        executable, "--plugin-dirs", str(PLUGIN_DIR),
+        executable, "--ignore-config", "--plugin-dirs", str(PLUGIN_DIR),
         "--dump-single-json", "--skip-download", "--no-playlist",
         "--playlist-items", "1", "--no-warnings", "--no-colors",
         "--encoding", "utf-8", "--socket-timeout", "15", "--retries", "1",
@@ -107,8 +109,11 @@ def probe_yt_dlp(executable: str) -> str:
 
 
 def is_valid_url(value: str) -> bool:
-    parsed = urlparse(value.strip())
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    try:
+        parsed = urlparse(value.strip())
+        return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+    except ValueError:
+        return False
 
 
 def build_command(
@@ -119,24 +124,28 @@ def build_command(
     download_playlist: bool,
     resolution: int | None = None,
 ) -> list[str]:
+    output_name = "%(title).180B [%(id)s]"
+    if format_name == COMPATIBLE_MP4:
+        output_name += "%(height& {}p|)s (H264)"
     command = [
-        executable,
-        "--plugin-dirs",
-        str(PLUGIN_DIR),
+        executable, "--ignore-config", "--plugin-dirs", str(PLUGIN_DIR),
+        "--encoding", "utf-8",
+        "--no-quiet",
+        "--progress",
         "--newline",
+        "--progress-delta", "0.2",
         "--no-colors",
         "--windows-filenames",
         "--progress-template",
-        "download:PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
-        "--print",
-        "after_move:FILE:%(filepath)s",
-        "-P",
-        destination,
-        "-o",
-        "%(title).180B [%(id)s].%(ext)s",
+        "download:PROGRESS:[%(info.format_id|null)j,%(progress.{status,downloaded_bytes,total_bytes,total_bytes_estimate,_speed_str,_eta_str})j]",
+        "--print", "before_dl:TRANSFER:[%(playlist_autonumber|null)s,%(n_entries|null)s,%(requested_formats.:.{format_id,filesize,filesize_approx}|null)j]",
+        "--print", "after_move:FILE:%(filepath)j",
+        "-P", destination,
+        "-o", output_name + ".%(ext)s",
     ]
-    if not download_playlist:
-        command.append("--no-playlist")
+    if format_name == COMPATIBLE_MP4:
+        command.extend(["-P", f"temp:{Path(destination) / '.yt-dlp-desktop'}"])
+    command.append("--yes-playlist" if download_playlist else "--no-playlist")
     format_options = FORMAT_OPTIONS[format_name].copy()
     if resolution is not None and "-f" in format_options:
         # A playlist can contain videos smaller than the requested quality.
@@ -150,29 +159,67 @@ def build_command(
     return command
 
 
+def style_title_bar(root: tk.Tk) -> None:
+    if os.name != "nt":
+        return
+    hwnd = ctypes.windll.user32.GetAncestor
+    hwnd.argtypes = (ctypes.c_void_p, ctypes.c_uint)
+    hwnd.restype = ctypes.c_void_p
+    window = hwnd(root.winfo_id(), 2)
+    set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+    set_attribute.argtypes = (ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint)
+    dark = ctypes.c_int(1)
+    if set_attribute(window, 20, ctypes.byref(dark), ctypes.sizeof(dark)) != 0:
+        set_attribute(window, 19, ctypes.byref(dark), ctypes.sizeof(dark))
+    # Windows 11 can match the client colors. Windows 10 uses the dark native caption.
+    for attribute, color in ((34, COLOR_BORDER), (35, COLOR_BACKGROUND), (36, COLOR_WHITE)):
+        rgb = bytes.fromhex(color[1:])
+        colorref = ctypes.c_uint(int.from_bytes(rgb, "little"))
+        set_attribute(window, attribute, ctypes.byref(colorref), ctypes.sizeof(colorref))
+
+
+class TransferProgress:
+    def __init__(self, formats: list[dict]) -> None:
+        sizes = {item["format_id"]: item.get("filesize") or item.get("filesize_approx") for item in formats}
+        self.weights = sizes if sizes and all(sizes.values()) else dict.fromkeys(sizes, 1)
+        self.fractions: dict[str, float] = {}
+
+    def update(self, format_id: str, data: dict) -> float | None:
+        total = data.get("total_bytes") or data.get("total_bytes_estimate")
+        if data.get("status") == "finished":
+            fraction = 1.0
+        elif total and (downloaded := data.get("downloaded_bytes")) is not None:
+            fraction = min(1.0, downloaded / total)
+        else:
+            return None
+        self.fractions[format_id] = max(fraction, self.fractions.get(format_id, 0))
+        if format_id not in self.weights:
+            return 100 * self.fractions[format_id]
+        return 100 * sum(
+            self.fractions.get(key, 0) * weight for key, weight in self.weights.items()
+        ) / sum(self.weights.values())
+
+
 class YtDlpApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(APP_NAME)
-        self.app_icon: tk.PhotoImage | None = None
         try:
-            self.app_icon = tk.PhotoImage(file=str(ICON_PNG))
-            self.root.iconphoto(True, self.app_icon)
             if ICON_ICO.is_file():
-                self.root.iconbitmap(default=str(ICON_ICO))
+                self.root.iconbitmap(str(ICON_ICO))
+            else:
+                self.root.iconphoto(True, tk.PhotoImage(file=str(ICON_PNG)))
         except tk.TclError:
-            self.app_icon = None
-        self.root.geometry("780x720")
-        self.root.minsize(680, 660)
+            pass
         self.root.configure(background=COLOR_BACKGROUND)
 
         self.messages: queue.Queue[tuple] = queue.Queue()
         self.process: subprocess.Popen[str] | None = None
         self.active_operation: str | None = None
         self.cancel_requested = False
+        self.close_when_done = False
         self.downloaded_files: list[str] = []
-        self.active_destination: Path | None = None
-        self.destination_snapshot: dict[str, tuple[int, int]] = {}
+        self.details_visible = False
         self.metadata_after: str | None = None
         self.metadata_revision = 0
         self.metadata_loading = False
@@ -183,12 +230,12 @@ class YtDlpApp:
         self.url_var = tk.StringVar()
         default_downloads = Path.home() / "Downloads"
         self.destination_var = tk.StringVar(value=str(default_downloads))
-        self.format_var = tk.StringVar(value="MP4 video (recommended)")
+        self.format_var = tk.StringVar(value=COMPATIBLE_MP4)
         self.resolution_var = tk.StringVar(value=BEST_RESOLUTION)
         self.resolution_hint = tk.StringVar(value="Paste a URL to check available resolutions.")
         self.playlist_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Ready")
-        self.detail_var = tk.StringVar(value="Paste a video URL to get started.")
+        self.detail_var = tk.StringVar()
         self.progress_var = tk.DoubleVar(value=0)
 
         self._configure_style()
@@ -203,279 +250,207 @@ class YtDlpApp:
     def _configure_style(self) -> None:
         style = ttk.Style(self.root)
         style.theme_use("clam")
-        style.configure("TFrame", background=COLOR_BACKGROUND)
-        style.configure("TLabel", background=COLOR_BACKGROUND, foreground=COLOR_WHITE, font=("Segoe UI", 10))
+        style.configure(".", font=("Segoe UI", 10), background=COLOR_BACKGROUND, foreground=COLOR_WHITE)
+        style.configure("Heading.TLabel", font=("Segoe UI Semibold", 17))
+        style.configure("Section.TLabel", font=("Segoe UI Semibold", 10))
+        style.configure("Muted.TLabel", foreground=COLOR_MUTED)
+        style.configure("Rule.TFrame", background=COLOR_BORDER)
+
+        for widget in ("TEntry", "TCombobox"):
+            style.configure(
+                widget, fieldbackground=COLOR_SURFACE, foreground=COLOR_WHITE,
+                background=COLOR_SURFACE, insertcolor=COLOR_WHITE, arrowcolor=COLOR_MUTED,
+                bordercolor=COLOR_BORDER, lightcolor=COLOR_SURFACE, darkcolor=COLOR_SURFACE,
+                padding=(8, 6),
+            )
+            style.map(
+                widget, fieldbackground=[("disabled", COLOR_BACKGROUND), ("readonly", COLOR_SURFACE)],
+                foreground=[("disabled", COLOR_MUTED), ("readonly", COLOR_WHITE)],
+                selectbackground=[("readonly", COLOR_SURFACE)],
+                selectforeground=[("readonly", COLOR_WHITE)],
+                bordercolor=[("focus", COLOR_FOCUS)],
+            )
+        self.root.option_add("*TCombobox*Listbox.background", COLOR_SURFACE)
+        self.root.option_add("*TCombobox*Listbox.foreground", COLOR_WHITE)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", COLOR_RED)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", COLOR_WHITE)
+
         style.configure(
-            "Prompt.TLabel",
-            background=COLOR_BACKGROUND,
-            foreground=COLOR_WHITE,
-            font=("Consolas", 22, "bold"),
-        )
-        style.configure(
-            "Brand.TLabel",
-            background=COLOR_BACKGROUND,
-            foreground=COLOR_RED,
-            font=("Segoe UI Semibold", 22, "italic"),
-        )
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground=COLOR_MUTED)
-        style.configure("Section.TLabel", font=("Segoe UI Semibold", 10), foreground=COLOR_WHITE)
-        style.configure("Status.TLabel", font=("Segoe UI Semibold", 10), foreground=COLOR_RED)
-        style.configure(
-            "TEntry",
-            fieldbackground=COLOR_SURFACE,
-            foreground=COLOR_WHITE,
-            insertcolor=COLOR_WHITE,
-            bordercolor=COLOR_BORDER,
-            lightcolor=COLOR_BORDER,
-            darkcolor=COLOR_BORDER,
-            padding=5,
+            "TCheckbutton", indicatorbackground=COLOR_SURFACE, indicatorforeground=COLOR_WHITE,
+            bordercolor=COLOR_BORDER, focuscolor=COLOR_FOCUS,
         )
         style.map(
-            "TEntry",
-            fieldbackground=[("disabled", COLOR_SURFACE), ("readonly", COLOR_SURFACE)],
+            "TCheckbutton", background=[("active", COLOR_BACKGROUND)],
             foreground=[("disabled", COLOR_MUTED)],
-            bordercolor=[("focus", COLOR_RED)],
-        )
-        style.configure(
-            "TCombobox",
-            fieldbackground=COLOR_SURFACE,
-            background=COLOR_SURFACE,
-            foreground=COLOR_WHITE,
-            arrowcolor=COLOR_WHITE,
-            bordercolor=COLOR_BORDER,
-            lightcolor=COLOR_BORDER,
-            darkcolor=COLOR_BORDER,
-            padding=5,
-        )
-        style.map(
-            "TCombobox",
-            fieldbackground=[("readonly", COLOR_SURFACE), ("disabled", COLOR_SURFACE)],
-            background=[("active", COLOR_SURFACE_HOVER), ("readonly", COLOR_SURFACE)],
-            foreground=[("readonly", COLOR_WHITE), ("disabled", COLOR_MUTED)],
-            bordercolor=[("focus", COLOR_RED)],
-        )
-        style.configure(
-            "TCheckbutton",
-            background=COLOR_BACKGROUND,
-            foreground=COLOR_WHITE,
-            indicatorbackground=COLOR_SURFACE,
-            indicatorforeground=COLOR_RED,
-            bordercolor=COLOR_BORDER,
-            focuscolor=COLOR_BACKGROUND,
-        )
-        style.map(
-            "TCheckbutton",
-            background=[("active", COLOR_BACKGROUND)],
-            foreground=[("active", COLOR_WHITE)],
             indicatorbackground=[("selected", COLOR_RED), ("active", COLOR_SURFACE_HOVER)],
         )
+
+        for widget in ("TButton", "TMenubutton", "Primary.TButton"):
+            primary = widget == "Primary.TButton"
+            background = COLOR_RED if primary else COLOR_BACKGROUND
+            hover = COLOR_RED_HOVER if primary else COLOR_SURFACE_HOVER
+            style.configure(
+                widget, padding=(12, 6), background=background, foreground=COLOR_WHITE,
+                bordercolor=COLOR_RED if primary else COLOR_BORDER,
+                lightcolor=background, darkcolor=background, focuscolor=COLOR_FOCUS,
+            )
+            style.map(
+                widget, background=[("disabled", COLOR_SURFACE), ("pressed", hover), ("active", hover)],
+                bordercolor=[("focus", COLOR_FOCUS), ("disabled", COLOR_BORDER)],
+                foreground=[("disabled", COLOR_MUTED)],
+            )
+        style.configure("Primary.TButton", font=("Segoe UI Semibold", 10), padding=(16, 7))
+        style.configure("TMenubutton", arrowcolor=COLOR_MUTED)
         style.configure(
-            "Primary.TButton",
-            font=("Segoe UI Semibold", 10),
-            padding=(18, 9),
-            background=COLOR_RED,
-            foreground=COLOR_WHITE,
-            bordercolor=COLOR_RED,
-            lightcolor=COLOR_RED,
-            darkcolor=COLOR_RED,
-            focuscolor=COLOR_RED,
-        )
-        style.map(
-            "Primary.TButton",
-            background=[("active", COLOR_RED_HOVER), ("pressed", COLOR_RED_HOVER), ("disabled", "#661111")],
-            foreground=[("disabled", "#B7B7B7")],
-        )
-        style.configure(
-            "Action.TButton",
-            font=("Segoe UI", 10),
-            padding=(12, 7),
-            background=COLOR_SURFACE,
-            foreground=COLOR_WHITE,
-            bordercolor=COLOR_BORDER,
-            lightcolor=COLOR_BORDER,
-            darkcolor=COLOR_BORDER,
-            focuscolor=COLOR_SURFACE,
-        )
-        style.map(
-            "Action.TButton",
-            background=[("active", COLOR_SURFACE_HOVER), ("pressed", COLOR_SURFACE_HOVER)],
-            foreground=[("active", COLOR_WHITE), ("disabled", "#777777")],
-            bordercolor=[("focus", COLOR_RED)],
+            "Red.Horizontal.TProgressbar", troughcolor=COLOR_SURFACE, background=COLOR_RED,
+            bordercolor=COLOR_BORDER, lightcolor=COLOR_RED, darkcolor=COLOR_RED, thickness=7,
         )
         style.configure(
-            "Red.Horizontal.TProgressbar",
-            troughcolor=COLOR_SURFACE,
-            background=COLOR_RED,
-            bordercolor=COLOR_BORDER,
-            lightcolor=COLOR_RED,
-            darkcolor=COLOR_RED,
-        )
-        style.configure(
-            "Details.Vertical.TScrollbar",
-            background=COLOR_SURFACE_HOVER,
-            troughcolor=COLOR_SURFACE,
-            bordercolor=COLOR_BORDER,
-            lightcolor=COLOR_SURFACE_HOVER,
-            darkcolor=COLOR_SURFACE_HOVER,
-            arrowcolor=COLOR_MUTED,
-            relief="flat",
-            borderwidth=0,
-            arrowsize=12,
-        )
-        style.map(
-            "Details.Vertical.TScrollbar",
-            background=[("pressed", COLOR_RED), ("active", COLOR_BORDER)],
-            arrowcolor=[("pressed", COLOR_WHITE), ("active", COLOR_WHITE)],
+            "Details.Vertical.TScrollbar", background=COLOR_SURFACE_HOVER, troughcolor=COLOR_SURFACE,
+            bordercolor=COLOR_BORDER, lightcolor=COLOR_SURFACE_HOVER, darkcolor=COLOR_SURFACE_HOVER,
+            arrowcolor=COLOR_MUTED, relief="flat", borderwidth=0, arrowsize=12,
         )
 
     def _build_ui(self) -> None:
-        container = ttk.Frame(self.root, padding=(24, 20, 24, 20))
-        container.grid(row=0, column=0, sticky="nsew")
-        self.root.rowconfigure(0, weight=1)
-        self.root.columnconfigure(0, weight=1)
+        container = ttk.Frame(self.root, padding=(24, 16, 24, 16))
+        container.pack(fill="both", expand=True)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(10, weight=1)
+        container.rowconfigure(11, weight=1)
 
-        brand = ttk.Frame(container)
-        brand.grid(row=0, column=0, sticky="w")
-        ttk.Label(brand, text=">_", style="Prompt.TLabel").pack(side="left")
-        ttk.Label(brand, text=APP_NAME, style="Brand.TLabel").pack(side="left", padx=(8, 0))
-        ttk.Label(
-            container,
-            text="Download and convert videos, audio, and playlists with yt-dlp",
-            style="Subtitle.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(0, 18))
+        header = ttk.Frame(container)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        ttk.Label(header, text="Download media", style="Heading.TLabel").pack(side="left")
+        tools = ttk.Menubutton(header, text="Tools", width=7, takefocus=True)
+        tools.pack(side="right")
+        self.tools_menu = tk.Menu(
+            tools, tearoff=False, background=COLOR_SURFACE, foreground=COLOR_WHITE,
+            activebackground=COLOR_SURFACE_HOVER, activeforeground=COLOR_WHITE,
+        )
+        self.tools_menu.add_command(label="Update yt-dlp", command=self.start_update)
+        tools.configure(menu=self.tools_menu)
+        ttk.Frame(container, height=1, style="Rule.TFrame").grid(row=1, column=0, sticky="ew", pady=(0, 15))
 
-        ttk.Label(container, text="Video URL", style="Section.TLabel").grid(row=2, column=0, sticky="w")
+        ttk.Label(container, text="Video or playlist URL", style="Section.TLabel").grid(row=2, column=0, sticky="w")
         url_row = ttk.Frame(container)
-        url_row.grid(row=3, column=0, sticky="ew", pady=(6, 14))
+        url_row.grid(row=3, column=0, sticky="ew", pady=(5, 14))
         url_row.columnconfigure(0, weight=1)
         self.url_entry = ttk.Entry(url_row, textvariable=self.url_var, font=("Segoe UI", 10))
-        self.url_entry.grid(row=0, column=0, sticky="ew", ipady=5)
+        self.url_entry.grid(row=0, column=0, sticky="ew")
         self.url_entry.bind("<Return>", lambda _event: self.start_download())
-
-        ttk.Label(container, text="Save to", style="Section.TLabel").grid(row=4, column=0, sticky="w")
-        folder_row = ttk.Frame(container)
-        folder_row.grid(row=5, column=0, sticky="ew", pady=(6, 14))
-        folder_row.columnconfigure(0, weight=1)
-        ttk.Entry(folder_row, textvariable=self.destination_var, font=("Segoe UI", 10)).grid(
-            row=0, column=0, sticky="ew", ipady=5
-        )
-        ttk.Button(folder_row, text="Browse...", command=self._choose_folder, style="Action.TButton").grid(
-            row=0, column=1, padx=(8, 0)
-        )
+        self.paste_button = ttk.Button(url_row, text="Paste", command=self._paste_url)
+        self.paste_button.grid(row=0, column=1, padx=(8, 0), sticky="ns")
 
         options = ttk.Frame(container)
-        options.grid(row=6, column=0, sticky="ew", pady=(0, 16))
-        options.columnconfigure(0, weight=1)
-        options.columnconfigure(1, weight=1)
+        options.grid(row=4, column=0, sticky="ew", pady=(0, 14))
+        options.columnconfigure(0, weight=3)
+        options.columnconfigure(1, weight=2)
         ttk.Label(options, text="Format", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.format_box = ttk.Combobox(
-            options,
-            textvariable=self.format_var,
-            values=list(FORMAT_OPTIONS),
-            state="readonly",
-            font=("Segoe UI", 10),
+            options, textvariable=self.format_var, values=list(FORMAT_OPTIONS),
+            state="readonly", width=24, font=("Segoe UI", 10),
         )
-        self.format_box.grid(row=1, column=0, sticky="ew", pady=(6, 0), ipady=4)
-        ttk.Label(options, text="Resolution", style="Section.TLabel").grid(
-            row=0, column=1, sticky="w", padx=(12, 0)
-        )
+        self.format_box.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        ttk.Label(options, text="Resolution", style="Section.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0))
         self.resolution_box = ttk.Combobox(
             options, textvariable=self.resolution_var, values=[BEST_RESOLUTION],
-            state="disabled", font=("Segoe UI", 10), width=22,
+            state="disabled", width=18, font=("Segoe UI", 10),
         )
-        self.resolution_box.grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(6, 0), ipady=4)
-        ttk.Label(options, textvariable=self.resolution_hint, style="Subtitle.TLabel").grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        self.resolution_box.grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(5, 0))
+        ttk.Label(options, textvariable=self.resolution_hint, style="Muted.TLabel").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(5, 0)
         )
-        ttk.Checkbutton(
-            options,
-            text="Download the entire playlist (if the URL contains one)",
-            variable=self.playlist_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.playlist_check = ttk.Checkbutton(options, text="Download entire playlist", variable=self.playlist_var)
+        self.playlist_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        action_row = ttk.Frame(container)
-        action_row.grid(row=7, column=0, sticky="ew", pady=(0, 16))
-        self.download_button = ttk.Button(
-            action_row,
-            text="Download",
-            command=self.start_download,
-            style="Primary.TButton",
+        ttk.Label(container, text="Save to", style="Section.TLabel").grid(row=5, column=0, sticky="w")
+        folder_row = ttk.Frame(container)
+        folder_row.grid(row=6, column=0, sticky="ew", pady=(5, 16))
+        folder_row.columnconfigure(0, weight=1)
+        self.destination_entry = ttk.Entry(folder_row, textvariable=self.destination_var, font=("Segoe UI", 10))
+        self.destination_entry.grid(row=0, column=0, sticky="ew")
+        self.browse_button = ttk.Button(folder_row, text="Browse…", command=self._choose_folder)
+        self.browse_button.grid(row=0, column=1, sticky="ns", padx=(8, 0))
+        ttk.Button(folder_row, text="Open folder", command=self._open_folder).grid(
+            row=0, column=2, sticky="ns", padx=(8, 0)
         )
-        self.download_button.pack(side="left")
-        self.cancel_button = ttk.Button(
-            action_row,
-            text="Cancel",
-            command=self.cancel_download,
-            state="disabled",
-            style="Action.TButton",
-        )
-        self.cancel_button.pack(side="left", padx=(8, 0))
-        self.update_button = ttk.Button(
-            action_row,
-            text="Update yt-dlp",
-            command=self.start_update,
-            style="Action.TButton",
-        )
-        self.update_button.pack(side="left", padx=(8, 0))
-        ttk.Button(
-            action_row,
-            text="Open folder",
-            command=self._open_folder,
-            style="Action.TButton",
-        ).pack(side="right")
 
+        ttk.Frame(container, height=1, style="Rule.TFrame").grid(row=7, column=0, sticky="ew")
         progress_frame = ttk.Frame(container)
-        progress_frame.grid(row=8, column=0, sticky="ew", pady=(0, 12))
+        progress_frame.grid(row=8, column=0, sticky="ew", pady=(13, 11))
         progress_frame.columnconfigure(0, weight=1)
-        ttk.Label(progress_frame, textvariable=self.status_var, style="Status.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(progress_frame, textvariable=self.detail_var, style="Subtitle.TLabel").grid(
-            row=0, column=1, sticky="e"
-        )
+        ttk.Label(progress_frame, textvariable=self.status_var, style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(progress_frame, textvariable=self.detail_var, style="Muted.TLabel").grid(row=0, column=1, sticky="e")
         self.progress = ttk.Progressbar(
-            progress_frame,
-            variable=self.progress_var,
-            maximum=100,
-            mode="determinate",
-            style="Red.Horizontal.TProgressbar",
+            progress_frame, variable=self.progress_var, maximum=100,
+            mode="determinate", style="Red.Horizontal.TProgressbar",
         )
         self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(7, 0))
 
-        ttk.Label(container, text="Details", style="Section.TLabel").grid(row=9, column=0, sticky="w")
-        log_frame = ttk.Frame(container)
-        log_frame.grid(row=10, column=0, sticky="nsew", pady=(6, 0))
-        log_frame.rowconfigure(0, weight=1)
-        log_frame.columnconfigure(0, weight=1)
+        actions = ttk.Frame(container)
+        actions.grid(row=9, column=0, sticky="ew")
+        actions.columnconfigure(1, weight=1)
+        self.details_button = ttk.Button(actions, text="Show details", command=self._toggle_details)
+        self.details_button.grid(row=0, column=0)
+        self.download_button = ttk.Button(
+            actions, text="Download", command=self.start_download, style="Primary.TButton", width=13,
+        )
+        self.download_button.grid(row=0, column=3)
+        self.cancel_button = ttk.Button(actions, text="Cancel", command=self.cancel_download)
+        self.cancel_button.grid(row=0, column=2, padx=(0, 8))
+        self.cancel_button.grid_remove()
+
+        self.log_frame = ttk.Frame(container)
+        self.log_frame.grid(row=11, column=0, sticky="nsew", pady=(12, 0))
+        self.log_frame.rowconfigure(0, weight=1)
+        self.log_frame.columnconfigure(0, weight=1)
         self.log = tk.Text(
-            log_frame,
-            height=8,
-            wrap="word",
-            state="disabled",
-            font=("Consolas", 9),
-            bg=COLOR_SURFACE,
-            fg=COLOR_WHITE,
-            insertbackground=COLOR_WHITE,
-            selectbackground=COLOR_RED,
-            selectforeground=COLOR_WHITE,
-            relief="solid",
-            borderwidth=1,
-            highlightthickness=1,
-            highlightbackground=COLOR_BORDER,
-            highlightcolor=COLOR_RED,
-            padx=8,
-            pady=8,
+            self.log_frame, height=5, wrap="word", state="disabled", font=("Consolas", 9),
+            bg=COLOR_SURFACE, fg=COLOR_WHITE, selectbackground=COLOR_RED, selectforeground=COLOR_WHITE,
+            relief="flat", borderwidth=0, highlightthickness=1,
+            highlightbackground=COLOR_BORDER, highlightcolor=COLOR_FOCUS, padx=8, pady=7,
         )
         self.log.grid(row=0, column=0, sticky="nsew")
         self.log_scrollbar = ttk.Scrollbar(
-            log_frame, orient="vertical", command=self.log.yview,
-            style="Details.Vertical.TScrollbar",
+            self.log_frame, orient="vertical", command=self.log.yview, style="Details.Vertical.TScrollbar",
         )
         self.log_scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_scrollbar.grid_remove()
         self.log.configure(yscrollcommand=self._update_log_scrollbar)
+        self.log_frame.grid_remove()
+
+        self.root.update_idletasks()
+        self.compact_height = container.winfo_reqheight()
+        self.root.minsize(575, self.compact_height)
+        self.root.geometry(f"705x{self.compact_height}")
+        style_title_bar(self.root)
+
+    def _toggle_details(self) -> None:
+        self._show_details(not self.details_visible)
+
+    def _show_details(self, visible: bool = True) -> None:
+        if visible == self.details_visible:
+            return
+        self.details_visible = visible
+        self.details_button.configure(text="Hide details" if visible else "Show details")
+        if visible:
+            self.log_frame.grid()
+        else:
+            self.log_frame.grid_remove()
+        height = self.compact_height + (125 if visible else 0)
+        self.root.minsize(575, height)
+        if self.root.state() == "normal" and (visible or self.root.winfo_height() <= height + 125):
+            self.root.geometry(f"{self.root.winfo_width()}x{max(height, self.root.winfo_height()) if visible else height}")
+
+    def _paste_url(self) -> None:
+        try:
+            value = self.root.clipboard_get().strip()
+        except tk.TclError:
+            return
+        if value:
+            self.url_var.set(value)
+            self.url_entry.focus_set()
+            self.url_entry.icursor("end")
+
 
     def _update_log_scrollbar(self, first: str, last: str) -> None:
         self.log_scrollbar.set(first, last)
@@ -508,11 +483,11 @@ class YtDlpApp:
             state="readonly" if is_video and heights and not self.active_operation else "disabled",
         )
         if not is_video:
-            hint = "Resolution does not apply to audio-only downloads."
+            hint = "Audio only."
         elif not is_valid_url(self.url_var.get()):
             hint = "Paste a URL to check available resolutions."
         elif self.metadata_url != self.url_var.get().strip():
-            hint = "Checking available resolutions..."
+            hint = "Checking available resolutions…"
         elif self.metadata_error:
             hint = "Could not detect resolutions; you can try the best available quality."
         elif not heights:
@@ -520,13 +495,13 @@ class YtDlpApp:
         elif self.playlist_var.get():
             hint = "For playlists, the selected resolution is the maximum quality."
         else:
-            hint = "Available resolutions for the selected video and format."
+            hint = "Converts when needed for video editors." if self.format_var.get() == COMPATIBLE_MP4 else "Keeps the source codecs."
         self.resolution_hint.set(hint)
 
     def _start_metadata(self) -> None:
         self.metadata_after = None
         url = self.url_var.get().strip()
-        if self.metadata_loading or not is_valid_url(url):
+        if self.active_operation or self.metadata_loading or not is_valid_url(url):
             return
         executable = locate_yt_dlp()
         if not executable:
@@ -568,12 +543,22 @@ class YtDlpApp:
             self.destination_var.set(selected)
 
     def _open_folder(self) -> None:
-        folder = Path(self.destination_var.get().strip())
+        folder = self._destination()
+        if folder is None:
+            return
         try:
             folder.mkdir(parents=True, exist_ok=True)
             os.startfile(str(folder))  # type: ignore[attr-defined]
         except OSError as exc:
-            messagebox.showerror(APP_NAME, f"Could not open the folder:\n{exc}")
+            messagebox.showerror(APP_NAME, f"Could not open the folder.\n{exc}", parent=self.root)
+
+    def _destination(self) -> Path | None:
+        value = self.destination_var.get().strip()
+        if value:
+            return Path(value).expanduser().absolute()
+        self.detail_var.set("Choose a download folder.")
+        self.destination_entry.focus_set()
+        return None
 
     def _append_log(self, text: str) -> None:
         self.log.configure(state="normal")
@@ -581,13 +566,35 @@ class YtDlpApp:
         self.log.see("end")
         self.log.configure(state="disabled")
 
+    def _clear_log(self) -> None:
+        self.log.configure(state="normal")
+        self.log.delete("1.0", "end")
+        self.log.configure(state="disabled")
+
     def _set_running(self, running: bool, cancellable: bool = True) -> None:
-        self.download_button.configure(state="disabled" if running else "normal")
-        self.update_button.configure(state="disabled" if running else "normal")
-        self.cancel_button.configure(state="normal" if running and cancellable else "disabled")
-        self.url_entry.configure(state="disabled" if running else "normal")
+        state = "disabled" if running else "normal"
+        for widget in (self.download_button, self.url_entry, self.paste_button,
+                       self.destination_entry, self.browse_button, self.playlist_check):
+            widget.configure(state=state)
+        self.tools_menu.entryconfigure(0, state=state)
+        if running and cancellable:
+            self.cancel_button.configure(state="normal")
+            self.cancel_button.grid()
+        else:
+            self.cancel_button.grid_remove()
         self.format_box.configure(state="disabled" if running else "readonly")
         self._refresh_resolutions()
+
+    def _show_progress(self, percentage: float | None) -> None:
+        if percentage is None:
+            if self.progress.cget("mode") != "indeterminate":
+                self.progress.configure(mode="indeterminate")
+                self.progress.start(15)
+        else:
+            if self.progress.cget("mode") != "determinate":
+                self.progress.stop()
+                self.progress.configure(mode="determinate")
+            self.progress_var.set(percentage)
 
     def start_download(self) -> None:
         if self.active_operation:
@@ -595,369 +602,233 @@ class YtDlpApp:
 
         url = self.url_var.get().strip()
         if not is_valid_url(url):
-            messagebox.showwarning(APP_NAME, "Enter a valid URL starting with http:// or https://.")
+            self.detail_var.set("Enter an HTTP or HTTPS URL.")
             self.url_entry.focus_set()
             return
 
         executable = locate_yt_dlp()
         if not executable:
-            messagebox.showerror(
-                APP_NAME,
-                "yt-dlp was not found. Run INSTALL.bat and try again.",
-            )
+            messagebox.showerror(APP_NAME, "yt-dlp was not found. Run the installer again.", parent=self.root)
             return
 
-        if "-f" in FORMAT_OPTIONS[self.format_var.get()] and self.metadata_url != url:
-            if self.metadata_after is not None:
-                self.root.after_cancel(self.metadata_after)
-                self.metadata_after = None
-            self._start_metadata()
-            self.resolution_hint.set("Wait for the scan, then choose a resolution and click Download.")
+        destination = self._destination()
+        if destination is None:
             return
-        try:
-            yt_dlp_version = probe_yt_dlp(executable)
-        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-            messagebox.showerror(APP_NAME, f"Could not verify yt-dlp:\n{exc}")
-            return
-
-        destination = Path(self.destination_var.get().strip())
         try:
             destination.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            messagebox.showerror(APP_NAME, f"The selected folder is not accessible:\n{exc}")
+            messagebox.showerror(APP_NAME, f"The selected folder is not accessible.\n{exc}", parent=self.root)
             return
 
         command = build_command(
-            executable,
-            url,
-            str(destination),
-            self.format_var.get(),
-            self.playlist_var.get(),
+            executable, url, str(destination), self.format_var.get(), self.playlist_var.get(),
             None if self.resolution_var.get() == BEST_RESOLUTION else int(self.resolution_var.get()[:-1]),
         )
         self.cancel_requested = False
         self.downloaded_files = []
-        self.active_destination = destination
-        self.destination_snapshot = self._snapshot_destination(destination)
-        self.progress_var.set(0)
-        self.status_var.set("Preparing...")
+        self._clear_log()
+        self._show_progress(None)
+        self.status_var.set("Preparing download…")
         self.detail_var.set("")
-        self.log.configure(state="normal")
-        self.log.delete("1.0", "end")
-        self.log.configure(state="disabled")
-        self._append_log(f"Engine: yt-dlp {yt_dlp_version}")
-        self._append_log(f"Destination: {destination}")
-        if "-f" in FORMAT_OPTIONS[self.format_var.get()]:
-            self._append_log(f"Resolution: {self.resolution_var.get()}")
         self.active_operation = "download"
         self._set_running(True)
 
         threading.Thread(target=self._download_worker, args=(command,), daemon=True).start()
 
     def _download_worker(self, command: list[str]) -> None:
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
-            self.process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding=locale.getpreferredencoding(False),
-                errors="replace",
-                creationflags=creation_flags,
-            )
-            self.messages.put(("status", "Downloading...", "Connecting to website"))
-            assert self.process.stdout is not None
-            for raw_line in self.process.stdout:
-                line = raw_line.rstrip("\r\n")
-                progress_match = re.match(r"PROGRESS:\s*([\d.,]+)%\|(.*?)\|(.*)", line)
-                if progress_match:
-                    percentage = float(progress_match.group(1).replace(",", "."))
-                    speed = progress_match.group(2).strip()
-                    eta = progress_match.group(3).strip()
-                    detail = speed
-                    if eta and eta.upper() != "NA":
-                        detail += f"  •  {eta} remaining"
-                    self.messages.put(("progress", percentage, detail))
-                elif line.startswith("FILE:"):
-                    downloaded_file = line[5:].strip()
-                    self.downloaded_files.append(downloaded_file)
-                    self.messages.put(("file", downloaded_file))
-                elif line:
-                    self.messages.put(("log", line))
-
-            return_code = self.process.wait()
-            self.messages.put(("done", return_code, self.cancel_requested))
-        except Exception as exc:  # Keeps GUI errors visible instead of losing them in pythonw.
-            self.messages.put(("error", "download", str(exc)))
-        finally:
+            with subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ) as process:
+                self.process = process
+                if self.cancel_requested:
+                    self._stop_process_tree(process)
+                transfer = TransferProgress([])
+                item = ""
+                for raw_line in process.stdout:
+                    line = raw_line.rstrip("\r\n")
+                    if line.startswith("TRANSFER:"):
+                        index, count, formats = json.loads(line.removeprefix("TRANSFER:"))
+                        item = f"Item {index} of {count} · " if index and count else f"Item {index} · " if index else ""
+                        transfer = TransferProgress(formats or [])
+                        self.messages.put(("phase", item + "Starting download…", ""))
+                    elif line.startswith("PROGRESS:"):
+                        format_id, data = json.loads(line.removeprefix("PROGRESS:"))
+                        percentage = transfer.update(format_id, data)
+                        speed = data.get("_speed_str", "").strip()
+                        eta = data.get("_eta_str", "").strip()
+                        detail = "  ·  ".join(filter(None, (
+                            speed if not speed.startswith("Unknown") else "",
+                            f"{eta} left" if re.fullmatch(r"\d+(?::\d+)+", eta) else "",
+                        )))
+                        status = item + (f"Downloading {int(percentage)}%" if percentage is not None else "Downloading…")
+                        self.messages.put(("progress", percentage, status, detail))
+                    elif line.startswith("FILE:"):
+                        self.messages.put(("file", json.loads(line.removeprefix("FILE:"))))
+                    elif line.startswith(("[Merger]", "[ExtractAudio]", "[DesktopCompatible]")):
+                        step = line.split("]", 1)[1].strip()
+                        status = "Converting video…" if step.startswith("Converting to") else "Finishing file…"
+                        self.messages.put(("phase", item + status, ""))
+                    elif line.startswith(("ERROR:", "WARNING:")):
+                        self.messages.put(("log", line))
+                return_code = process.wait()
             self.process = None
+            self.messages.put(("done", return_code, self.cancel_requested))
+        except (OSError, ValueError) as exc:
+            self.process = None
+            self.messages.put(("error", "download", str(exc)))
 
     def start_update(self) -> None:
         if self.active_operation:
             return
-
         executable = locate_yt_dlp()
         if not executable:
-            messagebox.showerror(
-                APP_NAME,
-                "yt-dlp was not found. Run INSTALL.bat and try again.",
-            )
+            messagebox.showerror(APP_NAME, "yt-dlp was not found. Run the installer again.", parent=self.root)
             return
-        try:
-            current_version = probe_yt_dlp(executable)
-        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-            messagebox.showerror(APP_NAME, f"Could not verify yt-dlp:\n{exc}")
-            return
-
-        self.log.configure(state="normal")
-        self.log.delete("1.0", "end")
-        self.log.configure(state="disabled")
-        self.status_var.set("Checking for updates...")
-        self.detail_var.set(f"Installed version: {current_version}")
-        self.progress_var.set(0)
-        self.progress.configure(mode="indeterminate")
-        self.progress.start(12)
-        self._append_log(f"Installed version: yt-dlp {current_version}")
-        self._append_log("Checking the latest official stable release...")
+        self._clear_log()
+        self.status_var.set("Checking for yt-dlp updates…")
+        self.detail_var.set("")
+        self._show_progress(None)
         self.active_operation = "update"
         self._set_running(True, cancellable=False)
+        threading.Thread(target=self._update_worker, args=(executable,), daemon=True).start()
 
-        threading.Thread(
-            target=self._update_worker,
-            args=(executable, current_version),
-            daemon=True,
-        ).start()
-
-    def _update_worker(self, executable: str, previous_version: str) -> None:
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    def _update_worker(self, executable: str) -> None:
         try:
-            self.process = subprocess.Popen(
-                build_update_command(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding=locale.getpreferredencoding(False),
-                errors="replace",
-                creationflags=creation_flags,
-            )
-            assert self.process.stdout is not None
-            for raw_line in self.process.stdout:
-                line = raw_line.rstrip("\r\n")
-                if line:
-                    self.messages.put(("log", line))
-
-            return_code = self.process.wait()
-            updated_version = previous_version
-            if return_code == 0:
-                updated_version = probe_yt_dlp(executable)
-            self.messages.put(("update_done", return_code, previous_version, updated_version))
-        except Exception as exc:  # Keeps GUI errors visible instead of losing them in pythonw.
-            self.messages.put(("error", "update", str(exc)))
-        finally:
+            previous_version = probe_yt_dlp(executable)
+            with subprocess.Popen(
+                build_update_command(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding=locale.getpreferredencoding(False), errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ) as process:
+                self.process = process
+                diagnostics = [line.rstrip() for line in process.stdout if line.startswith(("ERROR:", "WARNING:"))]
+                return_code = process.wait()
+            updated_version = probe_yt_dlp(executable) if return_code == 0 else previous_version
             self.process = None
+            for line in diagnostics:
+                self.messages.put(("log", line))
+            self.messages.put(("update_done", return_code, previous_version, updated_version))
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            self.process = None
+            self.messages.put(("error", "update", str(exc)))
 
     def _drain_messages(self) -> None:
         try:
             while True:
-                message = self.messages.get_nowait()
-                kind = message[0]
+                kind, *data = self.messages.get_nowait()
+                if self.close_when_done and kind in {"done", "update_done", "error"}:
+                    self.root.destroy()
+                    return
                 if kind == "metadata":
+                    revision, url, info, error = data
                     self.metadata_loading = False
-                    if message[1] != self.metadata_revision:
+                    if revision != self.metadata_revision:
                         if self.metadata_after is None:
                             self._start_metadata()
                         continue
-                    self.metadata_url = message[2]
-                    self.metadata_info = message[3]
-                    self.metadata_error = bool(message[4])
-                    if message[4]:
-                        self._append_log(f"Resolution lookup: {message[4]}")
+                    self.metadata_url = url
+                    self.metadata_info = info
+                    self.metadata_error = bool(error)
                     self._refresh_resolutions()
-                elif kind == "status":
-                    self.status_var.set(message[1])
-                    self.detail_var.set(message[2])
-                elif kind == "progress":
-                    self.progress_var.set(message[1])
-                    self.status_var.set(f"Download {message[1]:.0f}%")
-                    self.detail_var.set(message[2])
+                elif kind in {"phase", "progress"} and not self.cancel_requested:
+                    percentage, status, detail = data if kind == "progress" else (None, *data)
+                    self._show_progress(percentage)
+                    self.status_var.set(status)
+                    self.detail_var.set(detail)
                 elif kind == "file":
-                    self._append_log(f"Saved: {message[1]}")
+                    path = data[0]
+                    if path not in self.downloaded_files and Path(path).is_file():
+                        self.downloaded_files.append(path)
+                        self._append_log(f"Saved: {path}")
                 elif kind == "log":
-                    self._append_log(message[1])
+                    self._append_log(data[0])
                 elif kind == "done":
-                    self._handle_done(message[1], message[2])
+                    self._handle_done(*data)
                 elif kind == "update_done":
-                    self._handle_update_done(message[1], message[2], message[3])
+                    self._handle_update_done(*data)
                 elif kind == "error":
-                    operation = message[1]
-                    self.progress.stop()
-                    self.progress.configure(mode="determinate")
-                    self.progress_var.set(0)
-                    self.active_operation = None
-                    self._set_running(False)
-                    self.status_var.set("Error")
-                    self.detail_var.set("")
-                    self._append_log(message[2])
-                    activity = "the update" if operation == "update" else "the download"
-                    messagebox.showerror(APP_NAME, f"Could not complete {activity}:\n{message[2]}")
+                    operation, error = data
+                    self._finish_operation(
+                        "Update failed" if operation == "update" else "Download failed",
+                        "See details", 0,
+                    )
+                    self._append_log(error)
+                    self._show_details()
         except queue.Empty:
             pass
         self.root.after(100, self._drain_messages)
 
+    def _finish_operation(self, status: str, detail: str, progress: float) -> None:
+        self.cancel_requested = False
+        self.active_operation = None
+        self._show_progress(progress)
+        self.status_var.set(status)
+        self.detail_var.set(detail)
+        self._set_running(False)
+        if self.metadata_url != self.url_var.get().strip() and self.metadata_after is None:
+            self._start_metadata()
+
     def _handle_done(self, return_code: int, was_cancelled: bool) -> None:
-        self.active_operation = None
-        self._set_running(False)
+        count = len(self.downloaded_files)
+        saved = "1 file saved" if count == 1 else f"{count} files saved" if count else ""
         if was_cancelled:
-            self.status_var.set("Download canceled")
-            self.detail_var.set("")
-            self._append_log("Operation canceled.")
-        elif return_code == 0:
-            verified_files: list[Path] = []
-            for raw_path in self.downloaded_files:
-                try:
-                    candidate = Path(raw_path)
-                    if candidate.is_file():
-                        verified_files.append(candidate)
-                except OSError:
-                    continue
-
-            if not verified_files and self.active_destination:
-                verified_files = self._find_changed_files(
-                    self.active_destination,
-                    self.destination_snapshot,
-                )
-
-            if verified_files:
-                self.progress_var.set(100)
-                self.status_var.set("Completed")
-                count = len(verified_files)
-                self.detail_var.set("File saved" if count == 1 else f"{count} files saved")
-                for downloaded_file in verified_files:
-                    self._append_log(f"Verified download: {downloaded_file}")
-                self.root.bell()
+            self._finish_operation("Download canceled", saved, 0)
+        elif return_code == 0 and count:
+            self._finish_operation("Download complete", saved, 100)
+        else:
+            self._finish_operation("Download incomplete" if count else "Download failed", saved or "See details", 0)
+            if return_code:
+                self._append_log(f"yt-dlp exited with code {return_code}.")
             else:
-                self.status_var.set("No file created")
-                self.detail_var.set("")
-                self._append_log("yt-dlp finished without creating a verifiable file.")
-                messagebox.showerror(
-                    APP_NAME,
-                    "yt-dlp finished, but no downloaded file was found. "
-                    "Check the details in the window.",
-                )
+                self._append_log("yt-dlp did not report a saved file.")
+            self._show_details()
+
+    def _handle_update_done(self, return_code: int, previous_version: str, updated_version: str) -> None:
+        if return_code:
+            self._finish_operation("Update failed", "See details", 0)
+            self._append_log(f"The updater exited with code {return_code}.")
+            self._show_details()
+        elif updated_version == previous_version:
+            self._finish_operation("yt-dlp is up to date", updated_version, 0)
         else:
-            self.status_var.set("Download failed")
-            self.detail_var.set(f"Error code {return_code}")
-            messagebox.showerror(
-                APP_NAME,
-                "The download failed. Check the details in the window.",
-            )
-
-    def _handle_update_done(
-        self,
-        return_code: int,
-        previous_version: str,
-        updated_version: str,
-    ) -> None:
-        self.progress.stop()
-        self.progress.configure(mode="determinate")
-        self.active_operation = None
-        self._set_running(False)
-
-        if return_code != 0:
-            self.progress_var.set(0)
-            self.status_var.set("Update failed")
-            self.detail_var.set(f"Error code {return_code}")
-            messagebox.showerror(
-                APP_NAME,
-                "Could not update yt-dlp. Check the details in the window.",
-            )
-            return
-
-        self.progress_var.set(100)
-        if updated_version == previous_version:
-            self.status_var.set("yt-dlp is up to date")
-            self.detail_var.set(f"Version {updated_version}")
-            self._append_log(f"No update needed: yt-dlp {updated_version}.")
-            messagebox.showinfo(APP_NAME, f"yt-dlp is already up to date (version {updated_version}).")
-        else:
-            self.status_var.set("Update completed")
-            self.detail_var.set(f"Version {updated_version}")
-            self._append_log(f"Verified update: {previous_version} → {updated_version}.")
-            self.root.bell()
-            messagebox.showinfo(
-                APP_NAME,
-                f"yt-dlp was updated from {previous_version} to {updated_version}.",
-            )
+            self._finish_operation("yt-dlp updated", updated_version, 0)
 
     @staticmethod
-    def _snapshot_destination(folder: Path) -> dict[str, tuple[int, int]]:
-        snapshot: dict[str, tuple[int, int]] = {}
-        try:
-            for item in folder.iterdir():
-                if not item.is_file():
-                    continue
-                stat = item.stat()
-                key = os.path.normcase(str(item.resolve()))
-                snapshot[key] = (stat.st_size, stat.st_mtime_ns)
-        except OSError:
-            pass
-        return snapshot
-
-    @staticmethod
-    def _find_changed_files(
-        folder: Path,
-        before: dict[str, tuple[int, int]],
-    ) -> list[Path]:
-        changed: list[Path] = []
-        temporary_suffixes = {".part", ".ytdl", ".temp"}
-        try:
-            for item in folder.iterdir():
-                if not item.is_file() or item.suffix.lower() in temporary_suffixes:
-                    continue
-                stat = item.stat()
-                key = os.path.normcase(str(item.resolve()))
-                signature = (stat.st_size, stat.st_mtime_ns)
-                if key not in before or before[key] != signature:
-                    changed.append(item)
-        except OSError:
-            return []
-        return sorted(changed, key=lambda item: item.stat().st_mtime_ns)
+    def _stop_process_tree(process: subprocess.Popen[str]) -> None:
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False,
+        )
 
     def cancel_download(self) -> None:
+        if self.active_operation != "download" or self.cancel_requested:
+            return
         process = self.process
-        if self.active_operation != "download" or not process or process.poll() is not None:
+        if process and process.poll() is not None:
             return
         self.cancel_requested = True
-        self.status_var.set("Canceling...")
+        self.status_var.set("Canceling download…")
         self.detail_var.set("")
         self.cancel_button.configure(state="disabled")
-
-        def stop_process_tree() -> None:
-            subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                check=False,
-            )
-
-        threading.Thread(target=stop_process_tree, daemon=True).start()
+        if process:
+            threading.Thread(target=self._stop_process_tree, args=(process,), daemon=True).start()
 
     def _on_close(self) -> None:
-        if self.process and self.process.poll() is None:
-            activity = "an update" if self.active_operation == "update" else "a download"
-            if not messagebox.askyesno(APP_NAME, f"{activity.capitalize()} is in progress. Stop it and close?"):
-                return
-            process = self.process
-            subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                check=False,
-            )
-        self.root.destroy()
+        if self.close_when_done:
+            return
+        if not self.active_operation:
+            self.root.destroy()
+            return
+        prompt = "Stop downloading and close?" if self.active_operation == "download" else "Close when the update finishes?"
+        if messagebox.askyesno(APP_NAME, prompt, parent=self.root):
+            self.close_when_done = True
+            if self.active_operation == "download":
+                self.cancel_download()
+
 
 
 def main() -> None:

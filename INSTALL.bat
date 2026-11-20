@@ -16,7 +16,9 @@ set "FFMPEG_EXE=%LINKS_DIR%\ffmpeg.exe"
 set "DENO_EXE=%LINKS_DIR%\deno.exe"
 set "PATH=%LINKS_DIR%;%PATH%"
 set "CHECK_ONLY=0"
+set "FROM_SETUP=0"
 if /I "%~1"=="--check" set "CHECK_ONLY=1"
+if /I "%~1"=="--setup" set "FROM_SETUP=1"
 
 echo ================================================================
 echo                   yt-dlp Desktop INSTALLER
@@ -36,11 +38,11 @@ if not exist "%PROJECT_DIR%requirements.txt" (
     call :fatal "requirements.txt is missing from the project folder."
     exit /b 1
 )
-if not exist "%PROJECT_DIR%assets\yt-dlp-icon.png" (
+if not exist "%PROJECT_DIR%assets\desktop.png" (
     call :fatal "The application PNG icon is missing."
     exit /b 1
 )
-if not exist "%PROJECT_DIR%assets\yt-dlp-icon.ico" (
+if not exist "%PROJECT_DIR%assets\desktop.ico" (
     call :fatal "The application Windows icon is missing."
     exit /b 1
 )
@@ -127,7 +129,7 @@ if "!FFMPEG_OK!"=="0" (
     if errorlevel 1 exit /b 1
 ) else (
     echo [OK] FFmpeg is already available.
-    call :upgrade_if_managed "yt-dlp.FFmpeg" "FFmpeg for yt-dlp"
+    if "%FROM_SETUP%"=="0" call :upgrade_if_managed "yt-dlp.FFmpeg" "FFmpeg for yt-dlp"
     if errorlevel 1 exit /b 1
 )
 call :check_deno
@@ -136,7 +138,7 @@ if "!DENO_OK!"=="0" (
     if errorlevel 1 exit /b 1
 ) else (
     echo [OK] Deno is already available.
-    call :upgrade_if_managed "DenoLand.Deno" "Deno"
+    if "%FROM_SETUP%"=="0" call :upgrade_if_managed "DenoLand.Deno" "Deno"
     if errorlevel 1 exit /b 1
 )
 call :ensure_user_path "%LINKS_DIR%"
@@ -171,12 +173,19 @@ if errorlevel 1 (
     call :fatal "app.py contains a syntax error."
     exit /b 1
 )
+"%VENV_YTDLP%" --ignore-config --plugin-dirs "%PROJECT_DIR%plugins" --use-postprocessor DesktopCompatible:when=post_process --list-extractors >nul 2>&1
+if errorlevel 1 (
+    call :fatal "The video compatibility postprocessor could not be loaded."
+    exit /b 1
+)
+
+if "%FROM_SETUP%"=="1" exit /b 0
 
 echo.
 echo [6/6] Creating the desktop shortcut...
 set "YT_DLP_PROJECT=%PROJECT_DIR_NO_SLASH%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shell=New-Object -ComObject WScript.Shell; $link=Join-Path $desktop 'yt-dlp Desktop.lnk'; $old=Join-Path $desktop 'YT-DLP.lnk'; if((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $link)){ $previous=$shell.CreateShortcut($old); if($previous.WorkingDirectory.TrimEnd('\') -ieq $project.TrimEnd('\')){Move-Item -LiteralPath $old -Destination $link} }; $shortcut=$shell.CreateShortcut($link); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Launch yt-dlp Desktop'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
+    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shell=New-Object -ComObject WScript.Shell; $link=Join-Path $desktop 'yt-dlp Desktop.lnk'; $old=Join-Path $desktop 'YT-DLP.lnk'; if((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $link)){ $previous=$shell.CreateShortcut($old); if($previous.WorkingDirectory.TrimEnd('\') -ieq $project.TrimEnd('\')){Move-Item -LiteralPath $old -Destination $link} }; $shortcut=$shell.CreateShortcut($link); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Launch yt-dlp Desktop'; $shortcut.IconLocation=(Join-Path $project 'assets\desktop.ico')+',0'; $shortcut.Save()"
 if errorlevel 1 (
     call :fatal "Could not create the desktop shortcut."
     exit /b 1
@@ -239,20 +248,22 @@ exit /b 0
 
 :check_ffmpeg
 set "FFMPEG_OK=0"
-if exist "%FFMPEG_EXE%" (
-    "%FFMPEG_EXE%" -version >nul 2>&1
-    if not errorlevel 1 set "FFMPEG_OK=1"
-) else (
-    ffmpeg -version >nul 2>&1
-    if not errorlevel 1 set "FFMPEG_OK=1"
-)
-if "!FFMPEG_OK!"=="0" for /f "delims=" %%P in ('where /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do if "!FFMPEG_OK!"=="0" (
-    "%%P" -version >nul 2>&1
-    if not errorlevel 1 (
-        set "FFMPEG_EXE=%%P"
-        set "FFMPEG_OK=1"
-    )
-)
+call :try_ffmpeg "%FFMPEG_EXE%"
+if "!FFMPEG_OK!"=="0" for /f "delims=" %%P in ('where ffmpeg.exe 2^>nul') do call :try_ffmpeg "%%P"
+if "!FFMPEG_OK!"=="0" for /f "delims=" %%P in ('where /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do call :try_ffmpeg "%%P"
+exit /b 0
+
+
+:try_ffmpeg
+if "!FFMPEG_OK!"=="1" exit /b 0
+if not exist "%~1" exit /b 0
+if not exist "%~dp1ffprobe.exe" exit /b 0
+"%~dp1ffprobe.exe" -version >nul 2>&1
+if errorlevel 1 exit /b 0
+"%~1" -hide_banner -encoders 2>nul | findstr.exe /C:" libx264 " >nul
+if errorlevel 1 exit /b 0
+set "FFMPEG_EXE=%~1"
+set "FFMPEG_OK=1"
 exit /b 0
 
 
@@ -279,7 +290,7 @@ exit /b 0
 if "!PYTHON_OK!"=="1" (echo   [OK] !PYTHON_VERSION! system installation) else (echo   [MISSING] Python 3.11 or later)
 if "!VENV_OK!"=="1" (echo   [OK] Local .venv environment) else (echo   [MISSING] Local .venv environment)
 if "!YTDLP_OK!"=="1" (echo   [OK] yt-dlp !YTDLP_VERSION! in .venv) else (echo   [MISSING] yt-dlp in .venv)
-if "!FFMPEG_OK!"=="1" (echo   [OK] FFmpeg) else (echo   [MISSING] FFmpeg)
+if "!FFMPEG_OK!"=="1" (echo   [OK] FFmpeg with H.264 encoding and FFprobe) else (echo   [MISSING] FFmpeg with H.264 encoding and FFprobe)
 if "!DENO_OK!"=="1" (echo   [OK] Deno) else (echo   [MISSING] Deno)
 exit /b 0
 
@@ -327,6 +338,7 @@ echo ================================================================
 echo [ERROR] %~1
 echo ================================================================
 if "%CHECK_ONLY%"=="1" exit /b 1
+if "%FROM_SETUP%"=="1" exit /b 1
 echo Press any key to close this window.
 pause >nul
 exit /b 1

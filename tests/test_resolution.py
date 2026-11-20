@@ -68,11 +68,24 @@ class ResolutionTests(unittest.TestCase):
                 selected = list(ydl.build_format_selector(command[command.index("-f") + 1])({"formats": formats, "incomplete_formats": False}))
                 self.assertEqual(selected, [])
 
-    def test_mp4_remuxes_other_containers_without_forcing_h264(self):
+    def test_mp4_enables_compatibility_postprocessor_at_high_resolution(self):
         command = app.build_command("yt-dlp", "https://example.com", ".", MP4, False, 2160)
-        self.assertEqual(command[command.index("--merge-output-format") + 1], "mp4")
-        self.assertEqual(command[command.index("--remux-video") + 1], "mp4")
-        self.assertNotIn("vcodec", command[command.index("-f") + 1])
+        original = app.build_command("yt-dlp", "https://example.com", ".", VIDEO, False, 2160)
+        self.assertEqual(command[command.index("--use-postprocessor") + 1], "DesktopCompatible:when=post_process")
+        self.assertIn("(H264)", command[command.index("-o") + 1])
+        self.assertIn("[height=2160]", command[command.index("-f") + 1])
+        self.assertNotIn("--use-postprocessor", original)
+
+    def test_split_stream_progress_advances_across_video_and_audio(self):
+        progress = app.TransferProgress([
+            {"format_id": "video", "filesize": 80},
+            {"format_id": "audio", "filesize": 20},
+        ])
+        self.assertIsNone(progress.update("video", {"downloaded_bytes": 1}))
+        self.assertEqual(progress.update("video", {"downloaded_bytes": 40, "total_bytes": 80}), 40)
+        self.assertEqual(progress.update("video", {"status": "finished"}), 80)
+        self.assertEqual(progress.update("audio", {"downloaded_bytes": 10, "total_bytes_estimate": 20}), 90)
+        self.assertEqual(progress.update("audio", {"status": "finished"}), 100)
 
 
 class InterfaceTests(unittest.TestCase):
@@ -83,8 +96,9 @@ class InterfaceTests(unittest.TestCase):
         self.root.update()
 
     def close_root(self):
+        self.gui.progress.stop()
         for timer in self.root.tk.call("after", "info"):
-            self.root.after_cancel(timer)
+            self.root.tk.call("after", "cancel", timer)
         self.root.destroy()
 
     def set_video(self):
@@ -96,6 +110,9 @@ class InterfaceTests(unittest.TestCase):
         self.gui._refresh_resolutions()
 
     def test_scrollbar_hides_shows_clears_and_adapts_to_resize(self):
+        self.assertFalse(self.gui.log_frame.winfo_ismapped())
+        self.gui.details_button.invoke()
+        self.root.update()
         self.assertFalse(self.gui.log_scrollbar.winfo_ismapped())
         for number in range(12):
             self.gui._append_log(f"Dettaglio {number}")
@@ -121,6 +138,7 @@ class InterfaceTests(unittest.TestCase):
     def test_native_paste_and_available_choices(self):
         self.root.clipboard_clear()
         self.root.clipboard_append("https://example.com/video")
+        self.root.update_idletasks()
         self.gui.url_entry.event_generate("<<Paste>>")
         self.assertEqual(self.gui.url_var.get(), "https://example.com/video")
         self.set_video()
@@ -159,18 +177,18 @@ class InterfaceTests(unittest.TestCase):
         self.assertIsNone(self.gui.metadata_url)
         self.assertFalse(self.gui.metadata_loading)
 
-    def test_download_waits_for_quality_detection(self):
+    def test_download_uses_best_available_without_waiting_for_quality_detection(self):
         self.gui.url_var.set("https://example.com/video")
-        with patch.object(self.gui, "_start_metadata") as start, patch("app.locate_yt_dlp", return_value="yt-dlp"), patch("app.probe_yt_dlp") as probe:
+        with patch("app.locate_yt_dlp", return_value="yt-dlp"), patch("app.threading.Thread") as thread, patch("app.Path.mkdir"):
             self.gui.start_download()
-        start.assert_called_once()
-        probe.assert_not_called()
-        self.assertIsNone(self.gui.active_operation)
+        command = thread.call_args.kwargs["args"][0]
+        self.assertNotIn("[height", command[command.index("-f") + 1])
+        self.assertEqual(self.gui.active_operation, "download")
 
     def test_selected_resolution_reaches_download_worker(self):
         self.set_video()
         self.gui.resolution_var.set("720p")
-        with patch("app.locate_yt_dlp", return_value="yt-dlp"), patch("app.probe_yt_dlp", return_value="2026.10.21"), patch("app.threading.Thread") as thread, patch.object(self.gui, "_snapshot_destination", return_value={}), patch("app.Path.mkdir"):
+        with patch("app.locate_yt_dlp", return_value="yt-dlp"), patch("app.threading.Thread") as thread, patch("app.Path.mkdir"):
             self.gui.start_download()
         command = thread.call_args.kwargs["args"][0]
         self.assertIn("[height=720]", command[command.index("-f") + 1])
@@ -194,6 +212,21 @@ class InterfaceTests(unittest.TestCase):
         with patch("app.subprocess.run", side_effect=subprocess.TimeoutExpired("yt-dlp", 60)):
             self.gui._metadata_worker("yt-dlp", "https://example.com/video", 2)
         self.assertTrue(self.gui.messages.get_nowait()[4])
+
+    def test_progress_changes_from_indeterminate_to_measured_and_cancel(self):
+        self.gui.active_operation = "download"
+        self.gui._set_running(True)
+        self.gui.messages.put(("phase", "Starting download…", ""))
+        self.gui._drain_messages()
+        self.assertEqual(str(self.gui.progress.cget("mode")), "indeterminate")
+        self.gui.messages.put(("progress", 42, "Downloading 42%", "4 MiB/s"))
+        self.gui._drain_messages()
+        self.assertEqual(str(self.gui.progress.cget("mode")), "determinate")
+        self.assertEqual(self.gui.progress_var.get(), 42)
+        self.gui.cancel_download()
+        self.gui.messages.put(("progress", 43, "Downloading 43%", ""))
+        self.gui._drain_messages()
+        self.assertEqual(self.gui.status_var.get(), "Canceling download…")
 
 
 if __name__ == "__main__":
