@@ -67,7 +67,9 @@ if errorlevel 1 (
 echo [1/6] Checking Python...
 if "!PYTHON_OK!"=="0" (
     echo [INSTALL] Python 3.13: no compatible Python version was found.
-    winget install --id "Python.Python.3.13" --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+    set "PYTHON_INSTALL_MODE="
+    if "%FROM_SETUP%"=="1" set "PYTHON_INSTALL_MODE=--silent"
+    winget install --id "Python.Python.3.13" --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity !PYTHON_INSTALL_MODE!
     if errorlevel 1 (
         call :fatal "Python 3.13 installation failed."
         exit /b 1

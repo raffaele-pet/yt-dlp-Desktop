@@ -137,7 +137,7 @@ def build_command(
         "--no-colors",
         "--windows-filenames",
         "--progress-template",
-        "download:PROGRESS:[%(info.format_id|null)j,%(progress.{status,downloaded_bytes,total_bytes,total_bytes_estimate,_speed_str,_eta_str})j]",
+        "download:PROGRESS:[%(info.format_id|null)j,%(progress.{status,downloaded_bytes,total_bytes,total_bytes_estimate,fragment_index,fragment_count,_speed_str,_eta_str})j]",
         "--print", "before_dl:TRANSFER:[%(playlist_autonumber|null)s,%(n_entries|null)s,%(requested_formats.:.{format_id,filesize,filesize_approx}|null)j]",
         "--print", "after_move:FILE:%(filepath)j",
         "-P", destination,
@@ -182,18 +182,33 @@ class TransferProgress:
     def __init__(self, formats: list[dict]) -> None:
         sizes = {item["format_id"]: item.get("filesize") or item.get("filesize_approx") for item in formats}
         self.weights = sizes if sizes and all(sizes.values()) else dict.fromkeys(sizes, 1)
-        self.fractions: dict[str, float] = {}
+        self.fractions: dict[str | None, float] = {}
 
-    def update(self, format_id: str, data: dict) -> float | None:
-        total = data.get("total_bytes") or data.get("total_bytes_estimate")
+    def update(self, format_id: str | None, data: dict) -> float | None:
+        if self.weights and format_id not in self.weights:
+            return None
+        downloaded = data.get("downloaded_bytes")
+        total = data.get("total_bytes")
+        estimate = data.get("total_bytes_estimate")
+        fragments = data.get("fragment_count")
         if data.get("status") == "finished":
             fraction = 1.0
-        elif total and (downloaded := data.get("downloaded_bytes")) is not None:
-            fraction = min(1.0, downloaded / total)
+        elif total and downloaded is not None:
+            fraction = downloaded / total
+        elif fragments:
+            # Early HLS/DASH byte estimates can be as small as the first packet.
+            index = data.get("fragment_index") or 0
+            fraction = index / fragments
+            if downloaded is not None and estimate and downloaded < estimate:
+                fraction = max(fraction, min((index + 1) / fragments, downloaded / estimate))
+        elif downloaded is not None and estimate and downloaded < estimate:
+            fraction = downloaded / estimate
         else:
             return None
+        if data.get("status") != "finished":
+            fraction = min(0.99, fraction)
         self.fractions[format_id] = max(fraction, self.fractions.get(format_id, 0))
-        if format_id not in self.weights:
+        if not self.weights:
             return 100 * self.fractions[format_id]
         return 100 * sum(
             self.fractions.get(key, 0) * weight for key, weight in self.weights.items()
@@ -586,12 +601,14 @@ class YtDlpApp:
         self._refresh_resolutions()
 
     def _show_progress(self, percentage: float | None) -> None:
+        mode = str(self.progress.cget("mode"))
         if percentage is None:
-            if self.progress.cget("mode") != "indeterminate":
+            if mode != "indeterminate":
+                self.progress_var.set(0)
                 self.progress.configure(mode="indeterminate")
                 self.progress.start(15)
         else:
-            if self.progress.cget("mode") != "determinate":
+            if mode != "determinate":
                 self.progress.stop()
                 self.progress.configure(mode="determinate")
             self.progress_var.set(percentage)
@@ -657,6 +674,9 @@ class YtDlpApp:
                     elif line.startswith("PROGRESS:"):
                         format_id, data = json.loads(line.removeprefix("PROGRESS:"))
                         percentage = transfer.update(format_id, data)
+                        if percentage == 100:
+                            self.messages.put(("phase", item + "Finishing file…", ""))
+                            continue
                         speed = data.get("_speed_str", "").strip()
                         eta = data.get("_eta_str", "").strip()
                         detail = "  ·  ".join(filter(None, (

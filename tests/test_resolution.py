@@ -87,6 +87,35 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(progress.update("audio", {"downloaded_bytes": 10, "total_bytes_estimate": 20}), 90)
         self.assertEqual(progress.update("audio", {"status": "finished"}), 100)
 
+    def test_fragmented_progress_recovers_from_first_packet_estimate(self):
+        progress = app.TransferProgress([])
+        for downloaded, estimate, index in (
+            (1024, 1024, 0),
+            (3072, 37888, 0),
+            (1197560, 38759424, 1),
+            (5000000, 20000000, 8),
+        ):
+            current = progress.update("96", {
+                "status": "downloading",
+                "downloaded_bytes": downloaded,
+                "total_bytes_estimate": estimate,
+                "fragment_index": index,
+                "fragment_count": 37,
+            })
+            self.assertLess(current, (index + 2) * 100 / 37)
+        self.assertGreater(current, 20)
+        self.assertEqual(progress.update("96", {"status": "finished"}), 100)
+
+    def test_active_transfer_cannot_report_full_completion(self):
+        progress = app.TransferProgress([])
+        self.assertIsNone(progress.update("video", {
+            "status": "downloading", "downloaded_bytes": 100, "total_bytes_estimate": 100,
+        }))
+        self.assertEqual(progress.update("video", {
+            "status": "downloading", "downloaded_bytes": 100, "total_bytes": 100,
+        }), 99)
+        self.assertEqual(progress.update("video", {"status": "finished"}), 100)
+
 
 class InterfaceTests(unittest.TestCase):
     def setUp(self):

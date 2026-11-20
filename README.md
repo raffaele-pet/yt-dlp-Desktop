@@ -11,6 +11,8 @@ Choose **one** method. Both require 64-bit Windows 10/11, an internet connection
 1. Open [Releases → latest](https://github.com/raffaele-pet/yt-dlp-Desktop/releases/latest) and download **`yt-dlp-Desktop-Setup.exe`** under **Assets**.
 2. Run the installer. Open **yt-dlp Desktop** from the Start menu or the optional desktop shortcut.
 
+If you already installed the app with the EXE, run the latest installer and choose **Update**. Setup reuses the current installation folder and shows each step in the wizard.
+
 ### Option 2 — From the repository
 
 1. Choose **Code → Download ZIP** and extract it, or clone the repository.
